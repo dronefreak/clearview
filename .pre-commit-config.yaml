@@ -25,7 +25,7 @@ repos:
         args: [--fix=lf]
       - id: detect-private-key
 
-  # ✅ Ruff: replaces black, isort, flake8, pyupgrade (partially)
+  # Ruff: replaces black, isort, flake8, pyupgrade (partially)
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.15
     hooks:

@@ -14,19 +14,29 @@ __version__ = "1.0.0"
 __author__ = "Saumya Kumaar Saksena"
 __license__ = "Apache-2.0"
 
-# High-level API
-from clearview.api import DerainingModel
-from clearview.losses import CombinedLoss, EdgeLoss, PerceptualLoss, SSIMLoss
-from clearview.models import AttentionUNet, UNet, get_model, list_models
-from clearview.utils import compute_metrics, load_checkpoint, save_checkpoint
+from clearview.models import (
+    UNet,
+    AttentionUNet,
+    get_model,
+    list_models,
+)
+from clearview.losses import (
+    CombinedLoss,
+    PerceptualLoss,
+    SSIMLoss,
+    EdgeLoss,
+)
+from clearview.utils import (
+    load_checkpoint,
+    save_checkpoint,
+    compute_metrics,
+)
 
 __all__ = [
     # Version info
     "__version__",
     "__author__",
     "__license__",
-    # High-level API
-    "DerainingModel",
     # Models
     "UNet",
     "AttentionUNet",
