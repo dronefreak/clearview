@@ -21,7 +21,8 @@ Please **do not** report security vulnerabilities through public GitHub issues. 
 
 Report the vulnerability privately through one of these methods:
 
-- **GitHub Security Advisories** (Preferred): 
+- **GitHub Security Advisories** (Preferred):
+
   - Go to the [Security tab](https://github.com/dronefreak/clearview/security)
   - Click "Report a vulnerability"
   - Fill out the form with details
@@ -42,15 +43,17 @@ Please include:
 - **Your contact information** for follow-up
 
 **Example Report:**
+
 ```markdown
 **Vulnerability Type:** Arbitrary Code Execution
 
 **Description:**
-The model loading function uses `torch.load()` without checking file 
-integrity, allowing malicious actors to embed arbitrary code in 
+The model loading function uses `torch.load()` without checking file
+integrity, allowing malicious actors to embed arbitrary code in
 pretrained weight files.
 
 **Steps to Reproduce:**
+
 1. Create malicious .pth file with embedded code
 2. Load using `model.load_weights('malicious.pth')`
 3. Arbitrary code executes during unpickling
@@ -128,7 +131,7 @@ When processing user-uploaded images:
 # Validate image before processing
 def safe_load_image(path: str, max_size: int = 10 * 1024 * 1024):
     """Safely load and validate image.
-    
+
     Args:
         path: Path to image file
         max_size: Maximum file size in bytes (default: 10MB)
@@ -136,17 +139,17 @@ def safe_load_image(path: str, max_size: int = 10 * 1024 * 1024):
     # Check file size
     if os.path.getsize(path) > max_size:
         raise ValueError("Image too large")
-    
+
     # Use safe image loading
     img = cv2.imread(path)
     if img is None:
         raise ValueError("Invalid image file")
-    
+
     # Validate dimensions
     h, w = img.shape[:2]
     if h > 4096 or w > 4096:
         raise ValueError("Image dimensions too large")
-    
+
     return img
 ```
 
@@ -196,6 +199,7 @@ Security patches will be announced through:
 ## Attribution
 
 Responsible disclosure researchers will be credited in:
+
 - Security advisory
 - Release notes
 - CONTRIBUTORS.md (if desired)
@@ -203,6 +207,7 @@ Responsible disclosure researchers will be credited in:
 ## Questions?
 
 For non-security questions about safety best practices:
+
 - Open a [GitHub Discussion](https://github.com/dronefreak/clearview/discussions)
 - Check existing security documentation
 

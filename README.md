@@ -75,23 +75,24 @@ python scripts/train.py \
 
 ## 📊 Results
 
-| Method | Rain100H (PSNR↑) | Rain100L (PSNR↑) | Params | Speed (ms) |
-|--------|------------------|------------------|--------|------------|
-| U-Net Baseline | 28.5 | 35.2 | 7.8M | 15 |
-| U-Net + Attention | 30.1 | 36.8 | 8.9M | 18 |
-| ResNet34 Encoder | 31.2 | 37.5 | 12.4M | 22 |
+| Method            | Rain100H (PSNR↑) | Rain100L (PSNR↑) | Params | Speed (ms) |
+| ----------------- | ---------------- | ---------------- | ------ | ---------- |
+| U-Net Baseline    | 28.5             | 35.2             | 7.8M   | 15         |
+| U-Net + Attention | 30.1             | 36.8             | 8.9M   | 18         |
+| ResNet34 Encoder  | 31.2             | 37.5             | 12.4M  | 22         |
 
-*Tested on NVIDIA RTX 3090, 512×384 images*
+_Tested on NVIDIA RTX 3090, 512×384 images_
 
 ### Visual Comparisons
 
 **Rain Removal:**
-```
-[Input (Rainy)]  →  [Our Model]  →  [Ground Truth]
-     🌧️                 ✨                 ☀️
+
+```markdown
+[Input (Rainy)] → [Our Model] → [Ground Truth]
+🌧️ ✨ ☀️
 ```
 
-*Add actual before/after images in the `assets/` folder*
+_Add actual before/after images in the `assets/` folder_
 
 ---
 
@@ -99,7 +100,7 @@ python scripts/train.py \
 
 The system uses an encoder-decoder architecture with skip connections:
 
-```
+```text
 Input (3×H×W)
     ↓
 [Encoder: ResNet/EfficientNet]
@@ -128,7 +129,7 @@ L_total = L1 + L2 + λ_ssim·L_ssim + λ_edge·L_edge + λ_perc·L_perceptual
 
 ## 📁 Project Structure
 
-```
+```bash
 clearview/
 ├── src/clearview/          # Core library
 │   ├── models/             # Neural network architectures
@@ -164,7 +165,7 @@ The models are trained on standard deraining benchmarks:
 
 Organize your data as:
 
-```
+```bash
 dataset/
 ├── train/
 │   ├── rainy_image/
@@ -213,7 +214,7 @@ training:
   epochs: 100
   learning_rate: 0.0001
   loss: l1l2ssim_edge_perceptual
-  
+
 data:
   train_csv: data/train.csv
   val_csv: data/val.csv
@@ -244,6 +245,7 @@ python scripts/evaluate.py \
 ```
 
 This generates:
+
 - Derained images
 - Metrics (PSNR, SSIM, MAE, MSE) per image
 - Aggregate statistics
@@ -266,6 +268,7 @@ python scripts/video_demo.py \
 ```
 
 Perfect for:
+
 - Autonomous driving footage
 - Surveillance videos
 - Dashcam recordings
@@ -281,6 +284,7 @@ python scripts/gradio_demo.py \
 ```
 
 Features:
+
 - Drag-and-drop image upload
 - Real-time processing
 - Side-by-side comparison
@@ -312,6 +316,7 @@ python scripts/create_demo_assets.py \
 ### Autonomous Driving
 
 Process real-time camera feeds or recorded footage:
+
 ```python
 from clearview import DerainingModel
 
@@ -324,6 +329,7 @@ for frame in video_stream:
 ```
 
 Or use the video processing script:
+
 ```bash
 python scripts/video_demo.py \
     --video dashcam_footage.mp4 \
@@ -334,6 +340,7 @@ python scripts/video_demo.py \
 ### Surveillance Systems
 
 Enhance video quality in rainy conditions:
+
 ```python
 # Process video stream with batching for efficiency
 batch_size = 8
@@ -345,11 +352,13 @@ for batch_frames in batched_video_stream(batch_size):
 ### Photography Enhancement
 
 Restore photos taken in rain/snow:
+
 ```bash
 python scripts/inference.py --image vacation_photo.jpg --output enhanced.jpg
 ```
 
 Or use the interactive demo:
+
 ```bash
 python scripts/gradio_demo.py --weights pretrained/unet_attention.pth
 # Upload images via web interface
@@ -438,6 +447,7 @@ If you use this code in your research, please cite:
 ```
 
 Original TensorFlow implementation (2019-2024, deprecated):
+
 ```bibtex
 @software{saksena2019deraining,
   author = {Saksena, Saumya Kumaar},
@@ -467,11 +477,13 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 ## 🐛 Known Issues & Roadmap
 
 ### Current Limitations
+
 - Real-time performance requires GPU (CPU inference is slow)
 - Large models may require >8GB VRAM for training
 - Video processing doesn't yet enforce temporal consistency (frame-by-frame only)
 
 ### Roadmap
+
 - [ ] Transformer-based architecture option
 - [ ] Diffusion model integration for better quality
 - [ ] Video deraining with temporal consistency and optical flow

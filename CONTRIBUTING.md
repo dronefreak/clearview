@@ -30,12 +30,14 @@ Before creating bug reports, please check existing issues to avoid duplicates. W
 - **Include your environment details** (OS, Python version, PyTorch version, GPU)
 
 **Bug Report Template:**
+
 ```markdown
 **Description:**
 A clear description of the bug.
 
 **To Reproduce:**
 Steps to reproduce the behavior:
+
 1. Run command '...'
 2. Use config '...'
 3. See error
@@ -44,6 +46,7 @@ Steps to reproduce the behavior:
 What you expected to happen.
 
 **Environment:**
+
 - OS: [e.g., Ubuntu 22.04]
 - Python version: [e.g., 3.10]
 - PyTorch version: [e.g., 2.0.1]
@@ -68,6 +71,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 #### Good First Issues
 
 Look for issues labeled `good first issue` if you're new to the project. These are typically:
+
 - Documentation improvements
 - Simple bug fixes
 - Adding tests for existing functionality
@@ -139,6 +143,7 @@ git checkout -b fix/bug-description
 ```
 
 Branch naming conventions:
+
 - `feature/` - New features
 - `fix/` - Bug fixes
 - `docs/` - Documentation changes
@@ -187,6 +192,7 @@ git push origin feature/your-feature-name
 ```
 
 Then create a Pull Request on GitHub with:
+
 - **Clear title** describing the change
 - **Description** of what changed and why
 - **Link to related issues** (e.g., "Closes #123")
@@ -194,25 +200,31 @@ Then create a Pull Request on GitHub with:
 - **Checklist** confirming you've tested and documented
 
 **PR Template:**
+
 ```markdown
 ## Description
+
 Brief description of changes.
 
 ## Related Issues
+
 Closes #(issue number)
 
 ## Type of Change
+
 - [ ] Bug fix
 - [ ] New feature
 - [ ] Breaking change
 - [ ] Documentation update
 
 ## Testing
+
 - [ ] Tests pass locally
 - [ ] Added new tests for new features
 - [ ] Updated documentation
 
 ## Screenshots (if applicable)
+
 Add before/after images if relevant.
 ```
 
@@ -243,12 +255,12 @@ def train_model(
     epochs: int = 100
 ) -> Dict[str, float]:
     """Train the deraining model.
-    
+
     Args:
         model: PyTorch model to train
         data_loader: DataLoader for training data
         epochs: Number of training epochs
-        
+
     Returns:
         Dictionary containing training metrics
     """
@@ -277,11 +289,12 @@ from clearview.losses import CombinedLoss
 ### Documentation
 
 - **Docstrings**: Use Google style docstrings
-- **Comments**: Explain *why*, not *what*
+- **Comments**: Explain _why_, not _what_
 - **Type hints**: Required for all public functions
 - **README updates**: Update if adding features
 
 Example docstring:
+
 ```python
 def preprocess_image(
     image: np.ndarray,
@@ -289,20 +302,20 @@ def preprocess_image(
     normalize: bool = True
 ) -> torch.Tensor:
     """Preprocess image for model input.
-    
+
     Resizes, normalizes, and converts image to PyTorch tensor.
-    
+
     Args:
         image: Input image as numpy array (H, W, C)
         target_size: Target (height, width) for resizing
         normalize: Whether to normalize to [0, 1] range
-        
+
     Returns:
         Preprocessed image tensor (C, H, W)
-        
+
     Raises:
         ValueError: If image shape is invalid
-        
+
     Example:
         >>> img = cv2.imread('rainy.jpg')
         >>> tensor = preprocess_image(img, target_size=(384, 512))
@@ -328,7 +341,7 @@ from clearview.models import UNet
 def test_unet_forward_pass():
     """Test U-Net forward pass with various input sizes."""
     model = UNet(in_channels=3, out_channels=3)
-    
+
     # Test multiple resolutions
     for size in [(256, 256), (512, 384), (1024, 768)]:
         x = torch.randn(2, 3, *size)
@@ -338,7 +351,7 @@ def test_unet_forward_pass():
 def test_unet_invalid_input():
     """Test U-Net handles invalid inputs gracefully."""
     model = UNet(in_channels=3, out_channels=3)
-    
+
     with pytest.raises(ValueError):
         # Should fail with wrong number of channels
         x = torch.randn(2, 4, 256, 256)
@@ -349,12 +362,11 @@ def test_unet_invalid_input():
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
+```html
+<type
+  >[optional scope]:
+  <description> [optional body] [optional footer(s)]</description></type
+>
 ```
 
 ### Types
@@ -401,6 +413,7 @@ chore: update PyTorch to 2.0.1
 ## Recognition
 
 Contributors will be recognized in:
+
 - The main README.md
 - Release notes for features they contribute
 - GitHub's contributor graph
