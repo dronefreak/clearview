@@ -504,7 +504,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ---
 
-## ⭐ Star History
+<!-- ## ⭐ Star History
 
 If you find this project useful, please consider giving it a star! ⭐
 
@@ -512,4 +512,4 @@ If you find this project useful, please consider giving it a star! ⭐
 
 ---
 
-**Built with ❤️ for computer vision and autonomous systems**
+**Built with ❤️ for computer vision and autonomous systems** -->
