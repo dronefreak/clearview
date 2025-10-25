@@ -23,6 +23,7 @@ from clearview.utils.visualization import (
     plot_training_curves,
     create_comparison_grid,
     save_comparison,
+    plot_metric_histogram,
 )
 from clearview.utils.image import (
     normalize_image,
@@ -54,6 +55,7 @@ __all__ = [
     "plot_training_curves",
     "create_comparison_grid",
     "save_comparison",
+    "plot_metric_histogram",
     # Image utilities
     "normalize_image",
     "denormalize_image",
