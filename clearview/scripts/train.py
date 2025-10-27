@@ -123,13 +123,14 @@ def parse_args() -> argparse.Namespace:
         "--loss",
         type=str,
         default="l1_l2_ssim_edge",
-        choices=["l1", "l2", "l1_l2_ssim", "l1_l2_ssim_edge", "custom"],
+        choices=["l1", "l2", "l1_l2_ssim", "l1_l2_ssim_edge", "l1_l2_ssim_edge_perceptual", "custom"],
         help="Loss function",
     )
     loss_group.add_argument("--l1-weight", type=float, default=1.0, help="L1 loss weight")
     loss_group.add_argument("--l2-weight", type=float, default=1.0, help="L2 loss weight")
     loss_group.add_argument("--ssim-weight", type=float, default=1.0, help="SSIM loss weight")
     loss_group.add_argument("--edge-weight", type=float, default=0.5, help="Edge loss weight")
+    loss_group.add_argument("--vgg-weight", type=float, default=0.5, help="VGG loss weight")
 
     # Augmentation arguments
     aug_group = parser.add_argument_group("Augmentation")
@@ -333,6 +334,14 @@ def setup_loss(args: argparse.Namespace) -> nn.Module:
             "l2": {"weight": args.l2_weight},
             "ssim": {"weight": args.ssim_weight},
             "edge": {"weight": args.edge_weight},
+        }
+    elif args.loss == "l1_l2_ssim_edge_perceptual":
+        loss_config = {
+            "l1": {"weight": args.l1_weight},
+            "l2": {"weight": args.l2_weight},
+            "ssim": {"weight": args.ssim_weight},
+            "edge": {"weight": args.edge_weight},
+            "perceptual": {"weight": args.vgg_weight},
         }
     else:
         raise ValueError(f"Unknown loss: {args.loss}")
