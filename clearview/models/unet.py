@@ -3,7 +3,7 @@
 Classic encoder-decoder architecture with skip connections.
 """
 
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 import torch
 import torch.nn as nn
@@ -106,6 +106,7 @@ class UNet(BaseModel):
 
         # Output layer
         self.output = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        self.final_activation = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -135,7 +136,7 @@ class UNet(BaseModel):
             x = up(x, skip_connections[i])
 
         # Output
-        result: torch.Tensor = self.output(x)
+        result: torch.Tensor = self.final_activation(self.output(x))
         return result
 
     def get_config(self) -> dict:
