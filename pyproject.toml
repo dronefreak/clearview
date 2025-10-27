@@ -4,130 +4,106 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clearview"
-version = "1.0.0"
-description = "Modern PyTorch implementation for neural image deraining and adverse weather removal"
-readme = "README.md"
+version = "0.1.0"
+description = "Deep learning framework for single image deraining"
+readme = ".github/README.md"
 requires-python = ">=3.8"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 authors = [
-    {name = "Saumya Kumaar Saksena", email = "saumya@example.com"}
+    {name = "ClearView Contributors", email = "clearview@example.com"}
 ]
 maintainers = [
-    {name = "Saumya Kumaar Saksena", email = "saumya@example.com"}
+    {name = "ClearView Contributors", email = "clearview@example.com"}
 ]
 keywords = [
-    "computer-vision",
-    "image-processing",
     "deep-learning",
+    "computer-vision",
+    "image-deraining",
+    "rain-removal",
     "pytorch",
-    "deraining",
-    "image-restoration",
-    "autonomous-driving",
-    "weather-removal"
+    "image-restoration"
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: Apache Software License",
-    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: Image Processing",
+    "Programming Language :: Python :: 3.12",
 ]
 
 dependencies = [
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
-    "Pillow>=10.0.0",
-    "pandas>=2.0.0",
-    "scikit-image>=0.21.0",
-    "albumentations>=1.3.0",
-    "PyYAML>=6.0",
-    "scikit-learn>=1.3.0",
-    "scipy>=1.11.0",
-    "tqdm>=4.65.0",
-    "tensorboard>=2.13.0",
+    "pillow>=10.0.0",
     "matplotlib>=3.7.0",
-    "seaborn>=0.12.0",
-    "omegaconf>=2.3.0",
-    "hydra-core>=1.3.0",
-    "rich>=13.0.0",
-    "timm>=0.9.0",
-    "segmentation-models-pytorch>=0.3.0",
+    "tqdm>=4.65.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4.0",
+    "pytest>=7.3.0",
     "pytest-cov>=4.1.0",
-    "black>=23.7.0",
-    "isort>=5.12.0",
-    "flake8>=6.1.0",
-    "mypy>=1.5.0",
+    "black>=23.3.0",
+    "ruff>=0.0.270",
+    "mypy>=1.3.0",
     "pre-commit>=3.3.0",
 ]
 
-onnx = [
-    "onnx>=1.14.0",
-    "onnxruntime>=1.15.0",
-]
-
-all = [
-    "clearview[dev,onnx]",
-]
-
 [project.urls]
-Homepage = "https://github.com/dronefreak/clearview"
-Documentation = "https://github.com/dronefreak/clearview/blob/main/docs"
-Repository = "https://github.com/dronefreak/clearview.git"
-"Bug Tracker" = "https://github.com/dronefreak/clearview/issues"
-Changelog = "https://github.com/dronefreak/clearview/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/yourusername/clearview"
+Documentation = "https://clearview.readthedocs.io"
+Repository = "https://github.com/yourusername/clearview"
+"Bug Tracker" = "https://github.com/yourusername/clearview/issues"
 
 [project.scripts]
-clearview-train = "clearview.cli:train_cli"
-clearview-eval = "clearview.cli:eval_cli"
-clearview-infer = "clearview.cli:infer_cli"
+clearview-train = "clearview.scripts.train:main"
+clearview-evaluate = "clearview.scripts.evaluate:main"
+clearview-inference = "clearview.scripts.inference:main"
 
 [tool.setuptools]
 packages = ["clearview"]
-package-dir = {"" = "src"}
 
 [tool.setuptools.package-data]
 clearview = ["py.typed"]
 
-[tool.black]
-line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers --cov=clearview --cov-report=term-missing"
 
-[tool.isort]
-profile = "black"
-line_length = 88
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
+[tool.black]
+line-length = 120
+target-version = ["py38", "py39", "py310", "py311"]
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
 
 [tool.mypy]
 python_version = "3.8"
@@ -144,36 +120,8 @@ strict_equality = true
 
 [[tool.mypy.overrides]]
 module = [
+    "matplotlib.*",
+    "PIL.*",
     "cv2.*",
-    "albumentations.*",
-    "segmentation_models_pytorch.*",
-    "timm.*",
 ]
 ignore_missing_imports = true
-
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = "-ra -q --strict-markers --cov=src/clearview --cov-report=term-missing --cov-report=html"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-
-[tool.coverage.run]
-source = ["src/clearview"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-]
-
-[tool.coverage.report]
-precision = 2
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "@abstractmethod",
-]

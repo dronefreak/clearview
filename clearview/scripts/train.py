@@ -408,7 +408,6 @@ def setup_scheduler(
             mode="min",
             factor=args.scheduler_factor,
             patience=args.scheduler_patience,
-            verbose=True,
         )
         monitor = "val_loss"
     elif args.scheduler == "cosine":

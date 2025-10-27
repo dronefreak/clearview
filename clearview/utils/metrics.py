@@ -38,7 +38,7 @@ def compute_psnr(
         >>> print(f"PSNR: {psnr:.2f} dB")
     """
     if isinstance(pred, torch.Tensor):
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         mse = F.mse_loss(pred, target, reduction="none")
         mse = mse.mean(dim=(1, 2, 3))  # Mean over channels and spatial dims
@@ -52,7 +52,7 @@ def compute_psnr(
             return psnr.mean().item()
         return psnr
     else:
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         # NumPy implementation
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
@@ -99,7 +99,7 @@ def compute_ssim(
         >>> print(f"SSIM: {ssim:.4f}")
     """
     if isinstance(pred, torch.Tensor):
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         # Use PyTorch implementation
         from clearview.losses.structural import _ssim, _gaussian_kernel
@@ -122,7 +122,7 @@ def compute_ssim(
             return ssim_val.item()
         return ssim_val
     else:
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         # NumPy implementation (simplified)
         try:
@@ -177,7 +177,7 @@ def compute_mae(
         >>> mae = compute_mae(pred, target)
     """
     if isinstance(pred, torch.Tensor):
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         mae = F.l1_loss(pred, target, reduction="none")
         mae = mae.mean(dim=(1, 2, 3))
@@ -186,7 +186,7 @@ def compute_mae(
             return mae.mean().item()
         return mae
     else:
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mae_np: np.ndarray = np.mean(np.abs(pred - target), axis=axis_tuple)
@@ -217,7 +217,7 @@ def compute_mse(
         >>> mse = compute_mse(pred, target)
     """
     if isinstance(pred, torch.Tensor):
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         mse = F.mse_loss(pred, target, reduction="none")
         mse = mse.mean(dim=(1, 2, 3))
@@ -226,7 +226,7 @@ def compute_mse(
             return mse.mean().item()
         return mse
     else:
-        if not isinstance(target, np.ndarray):
+        if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mse_np: np.ndarray = np.mean((pred - target) ** 2, axis=axis_tuple)

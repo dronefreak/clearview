@@ -211,17 +211,17 @@ class UpBlock(nn.Module):
         # Upsampling
         if use_transpose_conv:
             self.up: nn.Module = nn.ConvTranspose2d(
-                in_channels, in_channels // 2, kernel_size=2, stride=2
+                in_channels, out_channels, kernel_size=2, stride=2
             )
         else:
             self.up = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
-                ConvBlock(in_channels, in_channels // 2, kernel_size=1, padding=0),
+                ConvBlock(in_channels, out_channels, kernel_size=1, padding=0),
             )
 
         # Convolution after concatenation
         self.conv = DoubleConv(
-            in_channels,
+            out_channels * 2,  # because of concatenation
             out_channels,
             use_batchnorm=use_batchnorm,
             activation=activation,

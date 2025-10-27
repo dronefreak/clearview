@@ -201,7 +201,7 @@ class Rain100Dataset(ImagePairDataset):
         root_dir = Path(root_dir)
 
         # Try common naming conventions
-        rainy_dirs = ["rainy", "rain", "input"]
+        rainy_dirs = ["rainy", "rain", "input", "rainy_image"]
         clean_dirs = ["norain", "clean", "ground_truth", "gt", "target"]
 
         rainy_dir = None

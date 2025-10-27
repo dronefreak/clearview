@@ -92,11 +92,11 @@ class UNet(BaseModel):
         # Decoder (upsampling path)
         self.decoder = nn.ModuleList()
 
-        for i in reversed(range(len(features))):
-            in_ch = features[i] * 2 if i == len(features) - 1 else features[i + 1]
+        for i in reversed(range(len(features) - 1)):
+            in_ch = features[i + 1] * 2 if i == len(features) - 2 else features[i + 1]
             self.decoder.append(
                 UpBlock(
-                    in_ch * 2,  # *2 because of skip connection
+                    in_ch,  # *2 because of skip connection
                     features[i],
                     use_transpose_conv=use_transpose_conv,
                     use_batchnorm=use_batchnorm,
