@@ -460,6 +460,7 @@ def main() -> None:
             EarlyStopping(
                 monitor=args.checkpoint_monitor,
                 patience=args.patience,
+                mode=args.checkpoint_mode,
                 restore_best_weights=True,
                 verbose=1,
             )
