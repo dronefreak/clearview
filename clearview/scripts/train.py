@@ -93,27 +93,15 @@ def parse_args() -> argparse.Namespace:
         choices=["unet", "attention_unet"],
         help="Model architecture",
     )
-    model_group.add_argument(
-        "--in-channels", type=int, default=3, help="Number of input channels"
-    )
-    model_group.add_argument(
-        "--out-channels", type=int, default=3, help="Number of output channels"
-    )
+    model_group.add_argument("--in-channels", type=int, default=3, help="Number of input channels")
+    model_group.add_argument("--out-channels", type=int, default=3, help="Number of output channels")
 
     # Training arguments
     train_group = parser.add_argument_group("Training")
-    train_group.add_argument(
-        "--epochs", type=int, default=100, help="Number of training epochs"
-    )
-    train_group.add_argument(
-        "--batch-size", type=int, default=8, help="Training batch size"
-    )
-    train_group.add_argument(
-        "--val-batch-size", type=int, default=8, help="Validation batch size"
-    )
-    train_group.add_argument(
-        "--num-workers", type=int, default=4, help="Number of data loading workers"
-    )
+    train_group.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
+    train_group.add_argument("--batch-size", type=int, default=8, help="Training batch size")
+    train_group.add_argument("--val-batch-size", type=int, default=8, help="Validation batch size")
+    train_group.add_argument("--num-workers", type=int, default=4, help="Number of data loading workers")
     train_group.add_argument("--seed", type=int, default=42, help="Random seed")
 
     # Optimizer arguments
@@ -126,12 +114,8 @@ def parse_args() -> argparse.Namespace:
         help="Optimizer type",
     )
     optim_group.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    optim_group.add_argument(
-        "--weight-decay", type=float, default=0.0, help="Weight decay"
-    )
-    optim_group.add_argument(
-        "--momentum", type=float, default=0.9, help="Momentum (for SGD)"
-    )
+    optim_group.add_argument("--weight-decay", type=float, default=0.0, help="Weight decay")
+    optim_group.add_argument("--momentum", type=float, default=0.9, help="Momentum (for SGD)")
 
     # Loss arguments
     loss_group = parser.add_argument_group("Loss")
@@ -142,30 +126,16 @@ def parse_args() -> argparse.Namespace:
         choices=["l1", "l2", "l1_l2_ssim", "l1_l2_ssim_edge", "custom"],
         help="Loss function",
     )
-    loss_group.add_argument(
-        "--l1-weight", type=float, default=1.0, help="L1 loss weight"
-    )
-    loss_group.add_argument(
-        "--l2-weight", type=float, default=1.0, help="L2 loss weight"
-    )
-    loss_group.add_argument(
-        "--ssim-weight", type=float, default=1.0, help="SSIM loss weight"
-    )
-    loss_group.add_argument(
-        "--edge-weight", type=float, default=0.5, help="Edge loss weight"
-    )
+    loss_group.add_argument("--l1-weight", type=float, default=1.0, help="L1 loss weight")
+    loss_group.add_argument("--l2-weight", type=float, default=1.0, help="L2 loss weight")
+    loss_group.add_argument("--ssim-weight", type=float, default=1.0, help="SSIM loss weight")
+    loss_group.add_argument("--edge-weight", type=float, default=0.5, help="Edge loss weight")
 
     # Augmentation arguments
     aug_group = parser.add_argument_group("Augmentation")
-    aug_group.add_argument(
-        "--crop-size", type=int, default=256, help="Random crop size"
-    )
-    aug_group.add_argument(
-        "--flip-prob", type=float, default=0.5, help="Probability of flipping"
-    )
-    aug_group.add_argument(
-        "--no-rotation", action="store_true", help="Disable random rotation"
-    )
+    aug_group.add_argument("--crop-size", type=int, default=256, help="Random crop size")
+    aug_group.add_argument("--flip-prob", type=float, default=0.5, help="Probability of flipping")
+    aug_group.add_argument("--no-rotation", action="store_true", help="Disable random rotation")
 
     # Scheduler arguments
     sched_group = parser.add_argument_group("LR Scheduler")
@@ -191,12 +161,8 @@ def parse_args() -> argparse.Namespace:
 
     # Callbacks arguments
     callback_group = parser.add_argument_group("Callbacks")
-    callback_group.add_argument(
-        "--early-stopping", action="store_true", help="Enable early stopping"
-    )
-    callback_group.add_argument(
-        "--patience", type=int, default=15, help="Early stopping patience"
-    )
+    callback_group.add_argument("--early-stopping", action="store_true", help="Enable early stopping")
+    callback_group.add_argument("--patience", type=int, default=15, help="Early stopping patience")
     callback_group.add_argument(
         "--checkpoint-monitor",
         type=str,
@@ -213,12 +179,8 @@ def parse_args() -> argparse.Namespace:
 
     # Mixed precision & optimization
     opt_group = parser.add_argument_group("Optimization")
-    opt_group.add_argument(
-        "--mixed-precision", action="store_true", help="Use automatic mixed precision"
-    )
-    opt_group.add_argument(
-        "--gradient-clip", type=float, default=None, help="Gradient clipping value"
-    )
+    opt_group.add_argument("--mixed-precision", action="store_true", help="Use automatic mixed precision")
+    opt_group.add_argument("--gradient-clip", type=float, default=None, help="Gradient clipping value")
 
     # Output arguments
     output_group = parser.add_argument_group("Output")
@@ -228,14 +190,10 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help="Output directory for checkpoints and logs",
     )
-    output_group.add_argument(
-        "--save-every", type=int, default=10, help="Save checkpoint every N epochs"
-    )
+    output_group.add_argument("--save-every", type=int, default=10, help="Save checkpoint every N epochs")
 
     # Resuming
-    parser.add_argument(
-        "--resume", type=str, default=None, help="Path to checkpoint to resume from"
-    )
+    parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume from")
 
     # Config file
     parser.add_argument(
@@ -287,9 +245,7 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
 
     # Create datasets
     if args.dataset_type == "rain100":
-        train_dataset = Rain100Dataset(
-            root_dir=data_dir / "train", transform=train_transform
-        )
+        train_dataset = Rain100Dataset(root_dir=data_dir / "train", transform=train_transform)
         val_dataset = Rain100Dataset(root_dir=data_dir / "val", transform=val_transform)
     else:  # pair
         train_dataset = ImagePairDataset(
@@ -328,9 +284,7 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
 
 def setup_model(args: argparse.Namespace) -> nn.Module:
     """Setup model."""
-    model = get_model(
-        args.model, in_channels=args.in_channels, out_channels=args.out_channels
-    )
+    model = get_model(args.model, in_channels=args.in_channels, out_channels=args.out_channels)
 
     logger.info(f"Model: {args.model}")
     logger.info(f"Parameters: {model.get_num_params():,}")
@@ -339,16 +293,12 @@ def setup_model(args: argparse.Namespace) -> nn.Module:
     return model
 
 
-def setup_optimizer(
-    args: argparse.Namespace, model: nn.Module
-) -> torch.optim.Optimizer:
+def setup_optimizer(args: argparse.Namespace, model: nn.Module) -> torch.optim.Optimizer:
     """Setup optimizer."""
     if args.optimizer == "adam":
         optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     elif args.optimizer == "adamw":
-        optimizer = AdamW(
-            model.parameters(), lr=args.lr, weight_decay=args.weight_decay
-        )
+        optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     elif args.optimizer == "sgd":
         optimizer = SGD(
             model.parameters(),
@@ -394,9 +344,7 @@ def setup_loss(args: argparse.Namespace) -> nn.Module:
     return loss_fn
 
 
-def setup_scheduler(
-    args: argparse.Namespace, optimizer: torch.optim.Optimizer
-) -> Tuple[Optional[Any], Optional[str]]:
+def setup_scheduler(args: argparse.Namespace, optimizer: torch.optim.Optimizer) -> Tuple[Optional[Any], Optional[str]]:
     """Setup learning rate scheduler."""
     if args.scheduler == "none":
         return None, None
@@ -417,9 +365,7 @@ def setup_scheduler(
         scheduler = StepLR(optimizer, step_size=30, gamma=0.1, verbose=True)
         monitor = None
     elif args.scheduler == "multistep":
-        scheduler = MultiStepLR(
-            optimizer, milestones=[30, 60, 90], gamma=0.1, verbose=True
-        )
+        scheduler = MultiStepLR(optimizer, milestones=[30, 60, 90], gamma=0.1, verbose=True)
         monitor = None
     else:
         raise ValueError(f"Unknown scheduler: {args.scheduler}")
@@ -503,7 +449,7 @@ def main() -> None:
     if args.early_stopping:
         callbacks.append(
             EarlyStopping(
-                monitor="val_loss",
+                monitor=args.checkpoint_monitor,
                 patience=args.patience,
                 restore_best_weights=True,
                 verbose=1,
@@ -515,9 +461,7 @@ def main() -> None:
     if args.scheduler != "none":
         scheduler, monitor = setup_scheduler(args, optimizer)
         if scheduler is not None:
-            callbacks.append(
-                LearningRateScheduler(scheduler, monitor=monitor, verbose=1)
-            )
+            callbacks.append(LearningRateScheduler(scheduler, monitor=monitor, verbose=1))
 
     # Setup trainer
     logger.info("\n" + "=" * 80)
@@ -563,9 +507,7 @@ def main() -> None:
 
         # Plot training curves
         logger.info("\nPlotting training curves")
-        plot_training_curves(
-            train_history=history, save_path=output_dir / "training_curves.png"
-        )
+        plot_training_curves(train_history=history, save_path=output_dir / "training_curves.png")
         logger.info(f"Training curves saved to {output_dir / 'training_curves.png'}")
 
         logger.info("\n" + "=" * 80)
@@ -575,9 +517,7 @@ def main() -> None:
     except KeyboardInterrupt:
         logger.info("\nTraining interrupted by user")
         trainer.save_checkpoint(output_dir / "checkpoints" / "interrupted.pth")
-        logger.info(
-            f"Checkpoint saved to {output_dir / 'checkpoints' / 'interrupted.pth'}"
-        )
+        logger.info(f"Checkpoint saved to {output_dir / 'checkpoints' / 'interrupted.pth'}")
 
     except Exception as e:
         logger.error(f"\nTraining failed with error: {e}", exc_info=True)
