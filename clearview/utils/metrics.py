@@ -4,12 +4,12 @@ Provides standard metrics like PSNR, SSIM, MAE, and MSE for evaluating
 image deraining and restoration quality.
 """
 
-from typing import Dict, List, Optional, cast, Union
 from collections import defaultdict
+from typing import Dict, List, Optional, Union, cast
 
+import numpy as np
 import torch
 import torch.nn.functional as F
-import numpy as np
 
 
 def compute_psnr(
@@ -102,7 +102,7 @@ def compute_ssim(
         if not isinstance(target, torch.Tensor):
             raise TypeError(f"Expected np.npdarray target, got {type(target)}")
         # Use PyTorch implementation
-        from clearview.losses.structural import _ssim, _gaussian_kernel
+        from clearview.losses.structural import _gaussian_kernel, _ssim
 
         # Create Gaussian window
         window = _gaussian_kernel(window_size, 1.5)
@@ -134,9 +134,7 @@ def compute_ssim(
                 for i in range(pred.shape[0]):
                     pred_hwc = pred[i].transpose(1, 2, 0)
                     target_hwc = target[i].transpose(1, 2, 0)
-                    ssim_val = structural_similarity(
-                        pred_hwc, target_hwc, data_range=max_val, channel_axis=2
-                    )
+                    ssim_val = structural_similarity(pred_hwc, target_hwc, data_range=max_val, channel_axis=2)
                     ssim_values.append(ssim_val)
 
                 if reduction == "mean":
@@ -150,10 +148,8 @@ def compute_ssim(
                     channel_axis=2 if pred.ndim == 3 else None,
                 )
                 return float(ssim_val)
-        except ImportError:
-            raise ImportError(
-                "scikit-image is required for SSIM computation with NumPy arrays"
-            )
+        except ImportError as err:
+            raise ImportError("scikit-image is required for SSIM computation with NumPy arrays") from err
 
 
 def compute_mae(
@@ -270,13 +266,13 @@ def compute_metrics(
         metric_lower = metric.lower()
 
         if metric_lower == "psnr":
-            results["psnr"] = float(compute_psnr(pred, target, max_val=max_val))
+            results["psnr"] = compute_psnr(pred, target, max_val=max_val)
         elif metric_lower == "ssim":
-            results["ssim"] = float(compute_ssim(pred, target, max_val=max_val))
+            results["ssim"] = compute_ssim(pred, target, max_val=max_val)
         elif metric_lower == "mae":
-            results["mae"] = float(compute_mae(pred, target))
+            results["mae"] = compute_mae(pred, target)
         elif metric_lower == "mse":
-            results["mse"] = float(compute_mse(pred, target))
+            results["mse"] = compute_mse(pred, target)
         else:
             raise ValueError(f"Unknown metric: {metric}")
 
