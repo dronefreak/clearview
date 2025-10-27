@@ -3,39 +3,17 @@
 U-Net with attention gates that learn to focus on relevant features.
 """
 
-from typing import List, Optional, Any
+from typing import Any, List, Optional
 
 import torch
 import torch.nn as nn
 
 from clearview.models.base import BaseModel
-from clearview.models.blocks import DoubleConv, DownBlock, UpBlock, AttentionGate
+from clearview.models.blocks import AttentionGate, DoubleConv, DownBlock, UpBlock
 
 
 class AttentionUNet(BaseModel):
-    """Attention U-Net with attention gates.
-
-    Enhanced U-Net that uses attention mechanisms to focus on relevant
-    spatial regions. Particularly effective for complex restoration tasks.
-
-    Args:
-        in_channels: Number of input channels. Default: 3 (RGB)
-        out_channels: Number of output channels. Default: 3 (RGB)
-        features: List of feature dimensions for each level. Default: [64, 128, 256, 512]
-        use_transpose_conv: Use transposed convolution for upsampling. Default: True
-        use_batchnorm: Use batch normalization. Default: True
-        activation: Activation function ('relu', 'leaky_relu'). Default: 'relu'
-
-    Reference:
-        Oktay et al. "Attention U-Net: Learning Where to Look for the Pancreas."
-        MIDL 2018.
-
-    Example:
-        >>> model = AttentionUNet(in_channels=3, out_channels=3)
-        >>> x = torch.randn(4, 3, 256, 256)
-        >>> y = model(x)  # (4, 3, 256, 256)
-        >>> print(f"Params: {model.get_num_params():,}")
-    """
+    """Attention U-Net with attention gates."""
 
     def __init__(
         self,
@@ -89,64 +67,61 @@ class AttentionUNet(BaseModel):
             activation=activation,
         )
 
-        # Attention gates
+        # We'll create one attention gate + one UpBlock per skip (deepest -> shallowest).
+        num_skips = len(features) - 1  # number of encoder outputs we will use as skips
+
         self.attention_gates = nn.ModuleList()
-
-        for i in reversed(range(len(features))):
-            gate_ch = features[i] * 2 if i == len(features) - 1 else features[i + 1]
-            skip_ch = features[i]
-
-            self.attention_gates.append(
-                AttentionGate(gate_channels=gate_ch, skip_channels=skip_ch)
-            )
-
-        # Decoder (upsampling path)
         self.decoder = nn.ModuleList()
 
-        for i in reversed(range(len(features))):
-            in_ch = features[i] * 2 if i == len(features) - 1 else features[i + 1]
+        # Gating channels start at bottleneck output channels
+        cur_channels = features[-1] * 2  # e.g., 512 * 2 = 1024
+
+        # Build for each skip level, deepest -> shallowest
+        for j in reversed(range(num_skips)):
+            skip_ch = features[j]  # skip channels at this level (j runs  num_skips-1 .. 0)
+            # Attention gate: gating is cur_channels, skip is skip_ch
+            self.attention_gates.append(AttentionGate(gate_channels=cur_channels, skip_channels=skip_ch))
+            # UpBlock upsamples cur_channels -> features[j+?], but we want output = features[j]
+            # For U-Net, after upsampling we produce features[j] (matching encoder level j)
             self.decoder.append(
                 UpBlock(
-                    in_ch * 2,  # *2 because of skip connection
-                    features[i],
+                    in_channels=cur_channels,
+                    out_channels=features[j],
                     use_transpose_conv=use_transpose_conv,
                     use_batchnorm=use_batchnorm,
                     activation=activation,
                 )
             )
+            # After this up-step, the decoder output channels become features[j]
+            cur_channels = features[j]
+
+        # Note: attention_gates and decoder are both length `num_skips` and ordered deepest -> shallowest.
 
         # Output layer
         self.output = nn.Conv2d(features[0], out_channels, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass with attention.
-
-        Args:
-            x: Input tensor of shape (B, C, H, W)
-
-        Returns:
-            Output tensor of shape (B, C, H, W)
-        """
-        # Encoder with skip connections
+        """Forward pass with attention."""
+        # Encoder with skip connections: collect encoder outputs EXCEPT the last one (which goes to bottleneck)
         skip_connections = []
 
         for i, down in enumerate(self.encoder):
             x = down(x)
+            # Collect all encoder outputs except the deepest (last) which feeds the bottleneck
             if i < len(self.encoder) - 1:
                 skip_connections.append(x)
 
-        # Bottleneck
+        # Bottleneck consumes the last encoder output
         x = self.bottleneck(x)
 
-        # Reverse skip connections for decoder
+        # Reverse skip connections so that index 0 is the deepest usable skip (matches decoder order)
         skip_connections = skip_connections[::-1]
 
         # Decoder with attention-weighted skip connections
+        # Both self.decoder and self.attention_gates are ordered deepest -> shallowest
         for i, (up, attn_gate) in enumerate(zip(self.decoder, self.attention_gates)):
-            # Apply attention gate to skip connection
-            skip_attended = attn_gate(x, skip_connections[i])
-
-            # Upsample and concatenate
+            skip = skip_connections[i]  # this skip now has the same spatial size expected by up(x) after upsampling
+            skip_attended = attn_gate(x, skip)
             x = up(x, skip_attended)
 
         # Output
@@ -154,7 +129,6 @@ class AttentionUNet(BaseModel):
         return result
 
     def get_config(self) -> dict:
-        """Get model configuration."""
         config = super().get_config()
         config.update(
             {
@@ -168,19 +142,9 @@ class AttentionUNet(BaseModel):
 
 
 class AttentionUNetSmall(AttentionUNet):
-    """Smaller Attention U-Net variant.
+    """Smaller Attention U-Net variant."""
 
-    Uses fewer features: [32, 64, 128, 256]
-
-    Example:
-        >>> model = AttentionUNetSmall()
-        >>> print(f"Params: {model.get_num_params():,}")
-    """
-
-    def __init__(
-        self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any
-    ) -> None:
-        """Initialize small Attention U-Net."""
+    def __init__(self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any) -> None:
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -190,19 +154,9 @@ class AttentionUNetSmall(AttentionUNet):
 
 
 class AttentionUNetLarge(AttentionUNet):
-    """Larger Attention U-Net variant.
+    """Larger Attention U-Net variant."""
 
-    Uses more features: [64, 128, 256, 512, 1024]
-
-    Example:
-        >>> model = AttentionUNetLarge()
-        >>> print(f"Params: {model.get_num_params():,}")
-    """
-
-    def __init__(
-        self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any
-    ) -> None:
-        """Initialize large Attention U-Net."""
+    def __init__(self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any) -> None:
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,

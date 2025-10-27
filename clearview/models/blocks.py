@@ -4,7 +4,7 @@ Provides reusable components like convolution blocks, attention modules,
 and encoder/decoder blocks.
 """
 
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -210,9 +210,7 @@ class UpBlock(nn.Module):
 
         # Upsampling
         if use_transpose_conv:
-            self.up: nn.Module = nn.ConvTranspose2d(
-                in_channels, out_channels, kernel_size=2, stride=2
-            )
+            self.up: nn.Module = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
         else:
             self.up = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
@@ -325,6 +323,9 @@ class AttentionGate(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
 
+        # Store latest attention map
+        self.latest_psi: Optional[torch.Tensor] = None
+
     def forward(self, g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
 
@@ -343,16 +344,18 @@ class AttentionGate(nn.Module):
 
         # Upsample gating signal if necessary
         if g1.size(2) != x1.size(2) or g1.size(3) != x1.size(3):
-            g1 = F.interpolate(
-                g1, size=x1.shape[2:], mode="bilinear", align_corners=True
-            )
+            g1 = F.interpolate(g1, size=x1.shape[2:], mode="bilinear", align_corners=True)
 
         # Attention coefficients
         psi = self.relu(g1 + x1)
         psi = self.psi(psi)
 
+        # Keep for visualization
+        self.latest_psi = psi.detach().cpu()
+
         # Apply attention
         result: torch.Tensor = x * psi
+
         return result
 
 

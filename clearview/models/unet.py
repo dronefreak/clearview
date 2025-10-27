@@ -96,7 +96,7 @@ class UNet(BaseModel):
             in_ch = features[i + 1] * 2 if i == len(features) - 2 else features[i + 1]
             self.decoder.append(
                 UpBlock(
-                    in_ch,  # *2 because of skip connection
+                    in_ch,
                     features[i],
                     use_transpose_conv=use_transpose_conv,
                     use_batchnorm=use_batchnorm,
