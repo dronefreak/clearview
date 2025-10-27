@@ -14,9 +14,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from clearview.training.callbacks import Callback, CallbackList
-from clearview.utils.metrics import compute_metrics, MetricsTracker
 from clearview.utils.logger import get_logger
-
+from clearview.utils.metrics import MetricsTracker, compute_metrics
 
 logger = get_logger(__name__)
 
@@ -153,9 +152,7 @@ class Trainer:
                 # Gradient clipping
                 if self.gradient_clip_val is not None:
                     self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.gradient_clip_val
-                    )
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.gradient_clip_val)
 
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
@@ -168,9 +165,7 @@ class Trainer:
 
                 # Gradient clipping
                 if self.gradient_clip_val is not None:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.gradient_clip_val
-                    )
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.gradient_clip_val)
 
                 self.optimizer.step()
 
@@ -179,9 +174,7 @@ class Trainer:
 
             # Compute metrics
             with torch.no_grad():
-                batch_metrics = compute_metrics(
-                    output.detach(), clean.detach(), metrics=self.metrics
-                )
+                batch_metrics = compute_metrics(output.detach().float(), clean.detach().float(), metrics=self.metrics)
                 metrics_tracker.update(batch_metrics, batch_size=rainy.size(0))
 
             # Update progress bar
@@ -275,9 +268,7 @@ class Trainer:
         """
         logger.info(f"Starting training for {epochs} epochs")
         logger.info(f"Device: {self.device}")
-        logger.info(
-            f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}"
-        )
+        logger.info(f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}")
 
         self.callbacks.on_train_begin()
 
@@ -380,9 +371,7 @@ class Trainer:
         torch.save(checkpoint, filepath)
         logger.info(f"Checkpoint saved to {filepath}")
 
-    def load_checkpoint(
-        self, filepath: Union[str, Path], load_optimizer: bool = True
-    ) -> Dict[str, Any]:
+    def load_checkpoint(self, filepath: Union[str, Path], load_optimizer: bool = True) -> Dict[str, Any]:
         """Load training checkpoint.
 
         Args:
