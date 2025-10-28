@@ -1,9 +1,9 @@
 # ClearView: Neural Image Deraining
 
-[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
-[![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-00599C?style=flat-square&logo=open-source-initiative&logoColor=white)](https://opensource.org/licenses/Apache-2.0)
-[![Code style: Black](https://img.shields.io/badge/Code%20Style-Black-000000?style=flat-square&logo=python&logoColor=white)](https://github.com/psf/black)
+[![🐍 Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white&style=for-the-badge)](https://www.python.org/downloads/)
+[![🔥 PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white&style=for-the-badge)](https://pytorch.org/)
+[![⚖️ License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green?logo=open-source-initiative&logoColor=white&style=for-the-badge)](https://opensource.org/licenses/Apache-2.0)
+[![🖤 Code style: Black](https://img.shields.io/badge/Code%20Style-Black-000000?logo=python&logoColor=white&style=for-the-badge)](https://github.com/psf/black)
 
 **Modern PyTorch implementation for removing rain, snow, and adverse weather effects from images using deep learning.**
 
