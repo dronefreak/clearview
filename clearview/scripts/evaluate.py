@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from clearview.api import DerainingModel
-from clearview.data import ImagePairDataset, Rain100Dataset, get_val_transforms
+from clearview.data import ImagePairDataset, Rain100Dataset, Rain1400Dataset, get_val_transforms
 from clearview.utils import (
     MetricsTracker,
     compute_metrics,
@@ -209,7 +209,9 @@ def main() -> None:
     if args.dataset_type == "rain100":
         dataset = Rain100Dataset(root_dir=data_dir, transform=transform)
     elif args.dataset_type == "rain1400":
-        dataset = Rain100Dataset(root_dir=data_dir / "test", transform=transform)
+        dataset = Rain1400Dataset(
+            rainy_dir=data_dir / args.rainy_dir, clean_dir=data_dir / args.clean_dir, transform=transform
+        )
     else:  # pair
         dataset = ImagePairDataset(
             rainy_dir=data_dir / args.rainy_dir,
