@@ -3,9 +3,9 @@
 [![🐍 Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white&style=for-the-badge)](https://www.python.org/downloads/)
 [![🔥 PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white&style=for-the-badge)](https://pytorch.org/)
 [![⚖️ License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green?logo=open-source-initiative&logoColor=white&style=for-the-badge)](https://opensource.org/licenses/Apache-2.0)
-[![🖤 Code style: Black](https://img.shields.io/badge/Code%20Style-Black-000000?logo=python&logoColor=white&style=for-the-badge)](https://github.com/psf/black)
+[![🤗 HuggingFace Demo](https://img.shields.io/badge/HuggingFace-Demo-FFD21E?logo=huggingface&logoColor=yellow&style=for-the-badge)](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
 
-**Modern PyTorch implementation for removing rain, snow, and adverse weather effects from images using deep learning.**
+**Fast and practical deep learning model for removing rain streaks from images using PyTorch.**
 
 Designed for autonomous driving perception, surveillance systems, and image restoration. Built with production-ready architectures and real-time inference capabilities.
 
@@ -13,13 +13,13 @@ Designed for autonomous driving perception, surveillance systems, and image rest
 
 ## 🎯 Features
 
-- **Multiple Architectures**: U-Net, Attention U-Net, with configurable backbones (ResNet, EfficientNet)
-- **Advanced Loss Functions**: Multi-component losses (L1+L2+SSIM+Edge+Perceptual)
-- **Real-Time Demo**: Live webcam deraining for instant testing
-- **Production Ready**: Mixed precision training, ONNX export, optimized inference
-- **Easy to Extend**: Add new models, losses, or datasets with minimal code
+- **Multiple Architectures**: U-Net, Attention U-Net with clean implementations
+- **Flexible Loss Functions**: L1, L2, SSIM, Edge, Perceptual losses (individual or combined)
+- **Interactive Demo**: Try it live on [HuggingFace Spaces](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
+- **Production Ready**: Mixed precision training, gradient clipping, early stopping
+- **Easy to Use**: Simple CLI interface with sensible defaults
 - **Comprehensive Metrics**: PSNR, SSIM, MAE, MSE tracking during training
-- **Pretrained Models**: Download and use state-of-the-art weights immediately
+- **Pretrained Models**: Download trained weights from [HuggingFace Hub](https://huggingface.co/dronefreak/clearview-derain-unet)
 
 ---
 
@@ -35,95 +35,134 @@ cd clearview
 # Install dependencies
 pip install -r requirements.txt
 
-# Or install as a package
+# Install as editable package
 pip install -e .
 ```
 
-### Try the Video Demo (Process Rainy Footage)
+### Try the Interactive Demo
+
+**Online (no installation required):**
+Try the model now: [🚀 Live Demo on HuggingFace](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
+
+**Local:**
 
 ```bash
-# Process a rainy video (perfect for autonomous driving footage)
-python scripts/video_demo.py \
-    --video rainy_driving.mp4 \
-    --weights pretrained/unet_attention.pth \
-    --output derained_result.mp4
-
-# Or try the interactive web demo
-python scripts/gradio_demo.py --weights pretrained/unet_attention.pth
+python scripts/gradio_demo.py --weights path/to/checkpoint.pth
 # Opens in browser - drag and drop rainy images for instant results
 ```
 
 ### Inference on a Single Image
 
 ```bash
-python scripts/inference.py \
-    --image path/to/rainy_image.jpg \
-    --weights pretrained/unet_attention.pth \
-    --output derained_result.jpg
+clearview-infer \
+    --image rainy_image.jpg \
+    --weights clearview-unet.pth \
+    --output derained.jpg
 ```
 
 ### Training Your Own Model
 
 ```bash
-python scripts/train.py \
-    --config configs/unet_attention.yaml \
-    --data_path /path/to/dataset \
-    --epochs 100
+clearview-train \
+    --data-dir /path/to/Rain1400 \
+    --output-dir experiments/my_model \
+    --model unet \
+    --loss l1 \
+    --optimizer adamw \
+    --lr 1e-4 \
+    --epochs 200 \
+    --batch-size 24 \
+    --dataset-type rain1400
 ```
 
 ---
 
 ## 📊 Results
 
-| Method            | Rain100H (PSNR↑) | Rain100L (PSNR↑) | Params | Speed (ms) |
-| ----------------- | ---------------- | ---------------- | ------ | ---------- |
-| U-Net Baseline    | 28.5             | 35.2             | 7.8M   | 15         |
-| U-Net + Attention | 30.1             | 36.8             | 8.9M   | 18         |
-| ResNet34 Encoder  | 31.2             | 37.5             | 12.4M  | 22         |
+### Quantitative Performance
 
-_Tested on NVIDIA RTX 3090, 512×384 images_
+Trained on **Rain1400** dataset (12,600 training pairs, 1,400 test pairs):
 
-### Visual Comparisons
+| Model          | Loss | Test PSNR | Test SSIM | Params | Speed (ms) |
+| -------------- | ---- | --------- | --------- | ------ | ---------- |
+| UNet           | L1   | **30.91** | **0.914** | 7.8M   | ~15        |
+| Attention UNet | L1   | 30.04     | 0.910     | 8.9M   | ~20        |
 
-**Rain Removal:**
+_Speed tested on NVIDIA RTX 4070 Super, 256×256 crops, batch size 1_
 
-```markdown
-[Input (Rainy)] → [Our Model] → [Ground Truth]
-🌧️ ✨ ☀️
-```
+**Key Findings:**
 
-_Add actual before/after images in the `assets/` folder_
+- ✅ **L1 loss outperforms multi-component losses** for this task
+- ✅ **Vanilla UNet matches Attention UNet** with fewer parameters
+- ✅ **High SSIM (0.914)** indicates excellent structural preservation
+
+### Visual Quality
+
+<table>
+<tr>
+<td>
+  <img src="../assets/heavy_rain_input.jpg" width="400" alt="Input image showing a scene with heavy rain"/><br/>
+  <b>Input (Heavy Rain)</b>
+</td>
+<td>
+  <img src="../assets/heavy_rain_output.jpg" width="400" alt="Output image showing the derained version of the scene"/><br/>
+  <b>Output (Derained)</b>
+</td>
+</tr>
+</table>
+
+**Strengths:**
+
+- Removes heavy rain streaks effectively
+- Preserves facial features and structural details
+- Natural color reproduction
+- No obvious artifacts
+
+**Limitations:**
+
+- Slight smoothing of fine textures (grass, branches)
+- Trained on synthetic rain (may not generalize to all real-world scenarios)
 
 ---
 
 ## 🏗️ Architecture
 
-The system uses an encoder-decoder architecture with skip connections:
+### UNet (Recommended)
 
 ```text
 Input (3×H×W)
     ↓
-[Encoder: ResNet/EfficientNet]
+[Encoder: 4 DoubleConv blocks]
+    ↓ [MaxPool after each]
+[Bottleneck: DoubleConv]
     ↓
-[Bottleneck + Attention]
+[Decoder: 4 TransposeConv + DoubleConv blocks]
+    ↓ (skip connections from encoder)
+[Output: Conv2d + Sigmoid]
     ↓
-[Decoder: Transpose Conv]
-    ↓ (skip connections)
-Output (3×H×W)
+Output (3×H×W) ∈ [0,1]
 ```
+
+**Key Design Choices:**
+
+- Simple conv blocks (no ResNet/EfficientNet needed for good performance)
+- Sigmoid activation to bound outputs to [0,1]
+- Skip connections for detail preservation
 
 ### Loss Function
 
-Multi-component loss for high-quality reconstruction:
+After extensive experimentation, **L1 loss alone** performs best:
 
 ```python
-L_total = L1 + L2 + λ_ssim·L_ssim + λ_edge·L_edge + λ_perc·L_perceptual
+loss = L1(pred, target)  # Simple pixel-wise L1
 ```
 
-- **L1 + L2**: Pixel-wise reconstruction
-- **L_ssim**: Structural similarity preservation
-- **L_edge**: Edge-aware restoration using Sobel filters
-- **L_perceptual**: VGG-based perceptual loss for natural textures
+**What I tried:**
+
+- ❌ L1 + L2 + SSIM + Edge + Perceptual → **Worse** (23-25 PSNR)
+- ❌ L1 + SSIM (weight 0.5) → **Worse** (22 PSNR)
+- ❌ L1 + SSIM (weight 0.01) → **Worse** (27 PSNR)
+- ✅ **L1 only** → **Best** (30.9 PSNR)
 
 ---
 
@@ -131,39 +170,35 @@ L_total = L1 + L2 + λ_ssim·L_ssim + λ_edge·L_edge + λ_perc·L_perceptual
 
 ```bash
 clearview/
-├── src/clearview/          # Core library
-│   ├── models/             # Neural network architectures
+├── clearview/              # Core library
+│   ├── models/             # UNet, Attention UNet
 │   ├── losses/             # Loss functions
-│   ├── data/               # Dataset loaders
-│   ├── training/           # Training utilities
-│   └── utils/              # Metrics, visualization, etc.
+│   ├── data/               # Dataset loaders (Rain100, Rain1400, custom)
+│   ├── training/           # Trainer, callbacks, schedulers
+│   └── utils/              # Metrics, conversions, logging
 ├── scripts/                # Command-line tools
 │   ├── train.py            # Training script
 │   ├── evaluate.py         # Evaluation script
-│   ├── inference.py        # Single image inference
-│   ├── video_demo.py       # Video processing demo
-│   ├── gradio_demo.py      # Interactive web UI
-│   └── create_demo_assets.py  # Generate GIFs/comparison grids
-├── configs/                # Configuration files
+│   └── inference.py        # Single image inference
+├── configs/                # YAML configuration examples
 ├── tests/                  # Unit tests
-├── docs/                   # Documentation
-└── pretrained/             # Pretrained model weights
+└── docs/                   # Documentation
 ```
 
 ---
 
 ## 📚 Datasets
 
-The models are trained on standard deraining benchmarks:
+### Supported Datasets
 
-- **Rain100H/L**: Heavy and light rain synthetic datasets
-- **Rain800**: Large-scale synthetic rain dataset
-- **Rain1400**: Diverse rain patterns
-- **SPA-Data**: Real-world rainy images
+- **Rain100H**: 1,800 train / 100 test (heavy rain)
+- **Rain100L**: 200 train / 100 test (light rain)
+- **Rain1400**: 12,600 train / 1,400 test (**recommended**, used for pretrained model)
+- **Custom datasets**: Easy to add with CSV file mapping
 
-### Prepare Your Own Dataset
+### Dataset Preparation
 
-Organize your data as:
+Organize your data:
 
 ```bash
 dataset/
@@ -174,140 +209,128 @@ dataset/
 │   └── ground_truth/
 │       ├── 001.jpg
 │       └── ...
-├── val/
-│   └── ...
 └── test/
-    └── ...
+    ├── rainy_image/
+    └── ground_truth/
 ```
 
-Create CSV files mapping rainy images to ground truth:
+**For Rain100H/L:**
 
-```csv
-rainy_image,ground_truth
-001.jpg,001.jpg
-002.jpg,002.jpg
+```bash
+clearview-train \
+    --data-dir /path/to/Rain100L \
+    --dataset-type rain100 \
+    ...
 ```
 
-See [docs/DATASETS.md](docs/DATASETS.md) for detailed instructions.
+**For Rain1400 or custom:**
+
+```bash
+clearview-train \
+    --data-dir /path/to/dataset \
+    --train-rainy train/rainy_image \
+    --train-clean train/ground_truth \
+    --val-rainy test/rainy_image \
+    --val-clean test/ground_truth \
+    --dataset-type rain1400 \
+    ...
+```
 
 ---
 
 ## 🎓 Training
 
-### Basic Training
+### Basic Training (Recommended Settings)
 
 ```bash
-python scripts/train.py --config configs/unet_attention.yaml
+clearview-train \
+    --data-dir /path/to/Rain1400 \
+    --output-dir experiments/unet_rain1400 \
+    --model unet \
+    --loss l1 \
+    --optimizer adamw \
+    --lr 1e-4 \
+    --epochs 200 \
+    --batch-size 24 \
+    --crop-size 256 \
+    --early-stopping \
+    --patience 50 \
+    --mixed-precision \
+    --gradient-clip 1.0 \
+    --scheduler plateau \
+    --dataset-type rain1400
 ```
 
-### Advanced Options
+**Training tips based on our experiments:**
 
-```yaml
-# configs/unet_attention.yaml
-model:
-  backbone: resnet34
-  use_attention: true
-  pretrained: true
+- ✅ Use **L1 loss only** for best results
+- ✅ Batch size 24-48 works well on modern GPUs
+- ✅ Early stopping patience 30-50 for large datasets
+- ✅ Mixed precision speeds up training without quality loss
+- ❌ **Avoid** complex multi-component losses unless carefully tuned
+- ❌ **Avoid** attention mechanisms (no benefit for this task) - TBD
 
-training:
-  batch_size: 16
-  epochs: 100
-  learning_rate: 0.0001
-  loss: l1l2ssim_edge_perceptual
+### Training Time
 
-data:
-  train_csv: data/train.csv
-  val_csv: data/val.csv
-  image_size: [384, 512]
-  augmentation: true
-```
+On **RTX 4070 Super (12GB)**:
+
+- Rain100L (200 images): ~1 sec/epoch → ~10 minutes total
+- Rain1400 (12,600 images): ~2 min/epoch → ~6-7 hours total
 
 ### Monitor Training
 
+Check logs:
+
 ```bash
-tensorboard --logdir logs/
+tail -f experiments/unet_rain1400/training.log
 ```
 
-See [docs/TRAINING.md](docs/TRAINING.md) for comprehensive training guide.
+View training curves:
+
+```bash
+# Automatically generated after training
+open experiments/unet_rain1400/training_curves.png
+```
 
 ---
 
 ## 🔬 Evaluation
 
-Evaluate on test set:
+### Evaluate on Test Set
 
 ```bash
-python scripts/evaluate.py \
-    --config configs/unet_attention.yaml \
-    --weights checkpoints/best_model.pth \
-    --test_csv data/test.csv \
-    --output_dir results/
+clearview-eval \
+    --weights experiments/unet_rain1400/checkpoints/final.pth \
+    --data-dir /path/to/Rain1400 \
+    --split test \
+    --output-dir results/
 ```
 
-This generates:
+**Output:**
 
-- Derained images
-- Metrics (PSNR, SSIM, MAE, MSE) per image
-- Aggregate statistics
-- Visual comparison grids
+```bash
+PSNR: 30.9058 (±2.1550, min=25.6811, max=38.0960)
+SSIM: 0.9137 (±0.0259, min=0.8308, max=0.9673)
+MAE: 0.0214 (±0.0056, min=0.0092, max=0.0399)
+MSE: 0.0009 (±0.0005, min=0.0002, max=0.0027)
+```
+
+Derained images saved to `results/`
 
 ---
 
-## 🎬 Demo Applications
+### Video Processing (Coming Soon)
 
-### Video Processing
-
-Process entire videos frame-by-frame with temporal consistency:
+Frame-by-frame video deraining:
 
 ```bash
 python scripts/video_demo.py \
     --video rainy_dashcam.mp4 \
-    --weights checkpoints/best_model.pth \
-    --output clean_video.mp4 \
-    --fps 30
+    --weights checkpoint.pth \
+    --output clean_video.mp4
 ```
 
-Perfect for:
-
-- Autonomous driving footage
-- Surveillance videos
-- Dashcam recordings
-
-### Interactive Web Demo
-
-Launch a browser-based interface for easy testing:
-
-```bash
-python scripts/gradio_demo.py \
-    --weights checkpoints/best_model.pth \
-    --share  # Creates public link
-```
-
-Features:
-
-- Drag-and-drop image upload
-- Real-time processing
-- Side-by-side comparison
-- Shareable public link (optional)
-
-### Create Demo Assets
-
-Generate marketing materials:
-
-```bash
-# Create animated GIF comparisons
-python scripts/create_demo_assets.py \
-    --images test_images/ \
-    --weights checkpoints/best_model.pth \
-    --output demo.gif
-
-# Create comparison grids
-python scripts/create_demo_assets.py \
-    --images test_images/ \
-    --weights checkpoints/best_model.pth \
-    --output comparison_grid.png \
-    --format grid
-```
+**Note:** Currently processes frames independently (no temporal consistency).
 
 ---
 
@@ -315,145 +338,86 @@ python scripts/create_demo_assets.py \
 
 ### Autonomous Driving
 
-Process real-time camera feeds or recorded footage:
+```python
+from clearview.models import UNet
+import torch
+from PIL import Image
+
+# Load model
+model = UNet()
+checkpoint = torch.load('clearview-unet.pth')
+model.load_state_dict(checkpoint['model_state_dict'])
+model.eval()
+
+# Process dashcam frame
+frame = Image.open('dashcam_frame.jpg')
+# ... preprocessing ...
+with torch.no_grad():
+    clean_frame = model(input_tensor)
+# ... postprocessing ...
+```
+
+### Surveillance Enhancement
+
+Process video streams in real-time:
 
 ```python
-from clearview import DerainingModel
-
-model = DerainingModel.from_pretrained('unet_attention')
-
-# Process video stream
 for frame in video_stream:
-    clean_frame = model.process(frame)
-    # Feed to object detection/segmentation pipeline
+    derained = model.process(frame)
+    # Feed to object detection/tracking
 ```
 
-Or use the video processing script:
+### Photo Restoration
 
 ```bash
-python scripts/video_demo.py \
-    --video dashcam_footage.mp4 \
-    --weights pretrained/unet_attention.pth \
-    --output clean_footage.mp4
-```
-
-### Surveillance Systems
-
-Enhance video quality in rainy conditions:
-
-```python
-# Process video stream with batching for efficiency
-batch_size = 8
-for batch_frames in batched_video_stream(batch_size):
-    derained_batch = model.process_batch(batch_frames)
-    # Continue with tracking/recognition
-```
-
-### Photography Enhancement
-
-Restore photos taken in rain/snow:
-
-```bash
-python scripts/inference.py --image vacation_photo.jpg --output enhanced.jpg
-```
-
-Or use the interactive demo:
-
-```bash
-python scripts/gradio_demo.py --weights pretrained/unet_attention.pth
-# Upload images via web interface
+clearview-infer --image vacation_photo.jpg --output enhanced.jpg
 ```
 
 ---
 
-## 🛠️ Advanced Usage
+## 📦 Pretrained Models
 
-### Export to ONNX
+Download from Hugging Face
 
-```bash
-python scripts/export_onnx.py \
-    --weights checkpoints/best_model.pth \
-    --output model.onnx
-```
+| Model     | Dataset  | PSNR  | Download                                                                                                                                                                                  |
+| --------- | -------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| UNet (L1) | Rain1400 | 30.91 | [![🤗 HuggingFace](https://img.shields.io/badge/HuggingFace-Model-FFD21E?logo=huggingface&logoColor=yellow&style=for-the-badge)](https://huggingface.co/dronefreak/clearview-derain-unet) |
 
-### Custom Model
+**Usage:**
 
 ```python
-from clearview.models import AttentionUNet
-from clearview.training import Trainer
+from huggingface_hub import hf_hub_download
 
-# Define custom model
-model = AttentionUNet(
-    encoder='efficientnet-b0',
-    decoder_channels=[256, 128, 64, 32],
-    use_attention=True
+weights = hf_hub_download(
+    repo_id="dronefreak/clearview-unet",
+    filename="clearview-unet.pth"
 )
-
-# Train
-trainer = Trainer(model, config)
-trainer.fit(train_loader, val_loader)
-```
-
-### Add Custom Loss
-
-```python
-from clearview.losses import BaseLoss
-
-class MyCustomLoss(BaseLoss):
-    def forward(self, pred, target):
-        # Your loss implementation
-        return loss_value
-
-# Register and use
-from clearview.training import register_loss
-register_loss('my_loss', MyCustomLoss)
 ```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions welcome! Areas for improvement:
 
-### Development Setup
+- ResNet/EfficientNet encoder implementation
+- Video temporal consistency
+- Real-world rain dataset curation
+- Mobile deployment (ONNX, TensorRT)
 
-```bash
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
-pytest tests/
-
-# Format code
-black src/ scripts/ tests/
-
-# Type checking
-mypy src/
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
 ## 📖 Citation
 
-If you use this code in your research, please cite:
-
 ```bibtex
 @software{saksena2025clearview,
   author = {Saksena, Saumya Kumaar},
-  title = {ClearView: Neural Image Deraining},
+  title = {ClearView: Practical Image Deraining with PyTorch},
   year = {2025},
-  url = {https://github.com/dronefreak/clearview}
-}
-```
-
-Original TensorFlow implementation (2019-2024, deprecated):
-
-```bibtex
-@software{saksena2019deraining,
-  author = {Saksena, Saumya Kumaar},
-  title = {Image De-raining using TensorFlow 2},
-  year = {2019},
-  note = {Repository archived and replaced by ClearView}
+  url = {https://github.com/dronefreak/clearview},
+  note = {Trained on Rain1400, 30.9 PSNR / 0.914 SSIM}
 }
 ```
 
@@ -461,16 +425,15 @@ Original TensorFlow implementation (2019-2024, deprecated):
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE)
 
 ---
 
 ## 🙏 Acknowledgments
 
-- Original architecture inspired by U-Net (Ronneberger et al., 2015)
-- Attention mechanisms based on Attention U-Net (Oktay et al., 2018)
-- Perceptual loss based on Johnson et al., 2016
-- Benchmark datasets: Rain100H/L, Rain800, Rain1400
+- U-Net architecture: Ronneberger et al., 2015
+- Rain1400 dataset: Fu et al., 2017
+- Inspired by classical deraining methods and modern deep learning approaches
 
 ---
 
@@ -478,38 +441,28 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ### Current Limitations
 
-- Real-time performance requires GPU (CPU inference is slow)
-- Large models may require >8GB VRAM for training
-- Video processing doesn't yet enforce temporal consistency (frame-by-frame only)
+- ❌ No temporal consistency for video (frame-by-frame only)
+- ❌ Slight texture smoothing on fine details
+- ❌ Trained on synthetic rain (may not generalize to all real-world scenarios)
+- ❌ CPU inference is slow (~1-2 sec/image)
 
 ### Roadmap
 
-- [ ] Transformer-based architecture option
-- [ ] Diffusion model integration for better quality
-- [ ] Video deraining with temporal consistency and optical flow
-- [ ] Mobile/edge deployment (TensorRT, CoreML)
-- [ ] Docker container for easy deployment
-- [ ] Hosted Gradio demo on Hugging Face Spaces
-- [ ] Support for snow, fog, haze removal
-- [ ] Semi-supervised training with unpaired data
-- [ ] Real-time optimizations for video processing
+- [ ] **ResNet encoder** for 32+ PSNR
+- [ ] **Temporal consistency** for video deraining
+- [ ] **Real-world rain dataset** collection and training
+- [ ] **Mobile deployment** (ONNX, CoreML, TensorRT)
+- [ ] **Larger crop sizes** (384×384, 512×512) with resize handling
+- [ ] **Snow/fog/haze removal** support
+- [ ] **Docker container** for easy deployment
 
 ---
 
 ## 📞 Contact
 
-- **Author**: Saumya Kumaar Saksena (dronefreak)
+- **Author**: Saumya Kumaar Saksena
+- **GitHub**: [@dronefreak](https://github.com/dronefreak)
 - **Issues**: [GitHub Issues](https://github.com/dronefreak/clearview/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/dronefreak/clearview/discussions)
+- **Demo**: [HuggingFace Space](https://huggingface.co/spaces/dronefreak/clearview-demo)
 
 ---
-
-<!-- ## ⭐ Star History
-
-If you find this project useful, please consider giving it a star! ⭐
-
-[![Star History Chart](https://api.star-history.com/svg?repos=dronefreak/clearview&type=Date)](https://star-history.com/#dronefreak/clearview&Date)
-
----
-
-**Built with ❤️ for computer vision and autonomous systems** -->
