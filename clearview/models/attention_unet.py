@@ -99,6 +99,7 @@ class AttentionUNet(BaseModel):
 
         # Output layer
         self.output = nn.Conv2d(features[0], out_channels, kernel_size=1)
+        self.final_activation = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass with attention."""
@@ -125,7 +126,7 @@ class AttentionUNet(BaseModel):
             x = up(x, skip_attended)
 
         # Output
-        result: torch.Tensor = self.output(x)
+        result: torch.Tensor = self.final_activation(self.output(x))
         return result
 
     def get_config(self) -> dict:

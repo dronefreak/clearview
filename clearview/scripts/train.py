@@ -20,6 +20,7 @@ from torch.utils.data import DataLoader
 from clearview.data import (
     ImagePairDataset,
     Rain100Dataset,
+    Rain1400Dataset,
     get_train_transforms,
     get_val_transforms,
 )
@@ -56,7 +57,7 @@ def parse_args() -> argparse.Namespace:
         "--dataset-type",
         type=str,
         default="pair",
-        choices=["pair", "rain100"],
+        choices=["pair", "rain100", "rain1400"],
         help="Dataset type",
     )
     data_group.add_argument(
@@ -248,6 +249,17 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     if args.dataset_type == "rain100":
         train_dataset = Rain100Dataset(root_dir=data_dir / "train", transform=train_transform)
         val_dataset = Rain100Dataset(root_dir=data_dir / "val", transform=val_transform)
+    elif args.dataset_type == "rain1400":
+        train_dataset = Rain1400Dataset(
+            rainy_dir=data_dir / args.train_rainy,
+            clean_dir=data_dir / args.train_clean,
+            transform=train_transform,
+        )
+        val_dataset = Rain1400Dataset(
+            rainy_dir=data_dir / args.val_rainy,
+            clean_dir=data_dir / args.val_clean,
+            transform=val_transform,
+        )
     else:  # pair
         train_dataset = ImagePairDataset(
             rainy_dir=data_dir / args.train_rainy,
@@ -442,15 +454,6 @@ def main() -> None:
             mode=args.checkpoint_mode,
             save_best_only=True,
             verbose=1,
-        )
-    )
-
-    # Regular checkpoints
-    callbacks.append(
-        ModelCheckpoint(
-            filepath=output_dir / "checkpoints" / "epoch_{epoch:03d}.pth",
-            save_best_only=False,
-            verbose=0,
         )
     )
 

@@ -300,9 +300,118 @@ class SyntheticRainDataset(Dataset):
         return rainy_tensor, clean_tensor
 
 
+class Rain1400Dataset(Dataset):
+    """Dataset for Rain1400 rainy/clean images.
+
+    Loads images from parallel directory structures:
+    ```
+    data/
+    ├── train/
+        ├── rainy_image/
+            ├──1_1.png
+            ├──1_2.png
+            └── ...
+        └── ground_truth/
+            ├──1.png
+            ├──2.png
+            └── ...
+    └── test/
+        ├── rainy_image/
+            ├──1_1.png
+            ├──1_2.png
+            └── ...
+        └── ground_truth/
+            ├──1.png
+            ├──2.png
+            └── ...
+    ```
+
+    Args:
+        rainy_dir: Directory containing rainy images
+        clean_dir: Directory containing clean images
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> dataset = Rain1400Dataset(
+        ...     rainy_dir='data/train/rainy_image',
+        ...     clean_dir='data/train/ground_truth'
+        ... )
+        >>> rainy, clean = dataset[0]
+    """
+
+    def __init__(
+        self,
+        rainy_dir: Union[str, Path],
+        clean_dir: Union[str, Path],
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize dataset."""
+        self.rainy_dir = Path(rainy_dir)
+        self.clean_dir = Path(clean_dir)
+        self.transform = transform
+        self.extensions = extensions
+
+        # Get image file lists
+        self.rainy_files = sorted(
+            [f for f in self.rainy_dir.iterdir() if f.suffix.lower() in extensions]
+        )
+
+        self.clean_files = sorted(
+            [f for f in self.clean_dir.iterdir() if f.suffix.lower() in extensions]
+        )
+        self.clean_files = []
+        for item in self.rainy_files:
+            filename = item.name.split("_")[0] + ".jpg"
+            self.clean_files.append(self.clean_dir / filename)
+
+        # Validate
+        if len(self.rainy_files) != len(self.clean_files):
+            raise ValueError(
+                f"Mismatch in number of images: "
+                f"{len(self.rainy_files)} rainy vs {len(self.clean_files)} clean"
+            )
+
+        logger.info(f"Loaded {len(self.rainy_files)} image pairs")
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a rainy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (rainy_tensor, clean_tensor)
+        """
+        # Load images
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        # Convert to numpy
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        # Apply transforms
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        # Convert to tensors
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
 __all__ = [
     "ImagePairDataset",
     "SingleFolderDataset",
     "Rain100Dataset",
     "SyntheticRainDataset",
+    "Rain1400Dataset",
 ]

@@ -8,6 +8,7 @@ from clearview.data.datasets import (
     ImagePairDataset,
     SingleFolderDataset,
     Rain100Dataset,
+    Rain1400Dataset,
     SyntheticRainDataset,
 )
 from clearview.data.transforms import (
@@ -28,6 +29,7 @@ __all__ = [
     "ImagePairDataset",
     "SingleFolderDataset",
     "Rain100Dataset",
+    "Rain1400Dataset",
     "SyntheticRainDataset",
     # Transforms
     "PairedTransform",
