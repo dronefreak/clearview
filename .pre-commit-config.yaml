@@ -1,16 +1,18 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
 default_language_version:
-  python: python3.8
+  python: python3
 
 repos:
+  # General file sanity checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: v4.5.0
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
       - id: end-of-file-fixer
-      - id: check-yaml
       - id: check-toml
-      - id: check-json
       - id: check-added-large-files
         args: [--maxkb=1000]
       - id: check-ast
@@ -24,10 +26,12 @@ repos:
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: detect-private-key
+      - id: requirements-txt-fixer
+        files: requirements.*\.txt$
 
-  # Ruff: replaces black, isort, flake8, pyupgrade (partially)
+  # Ruff — fast Python linter + import sorter + partial security scan
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.2
+    rev: v0.1.15
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -35,65 +39,83 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
-  # Prettier for non-Python files
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
-        types_or: [yaml, markdown, json]
-        exclude: ^(CHANGELOG\.md|LICENSE)$
-
-  # Pyupgrade: keep if you want syntax modernization
+  # Pyupgrade — auto-modernize syntax for Python 3.8+
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.0
+    rev: v3.15.0
     hooks:
       - id: pyupgrade
         args: [--py38-plus]
 
-  # MyPy
+  # Pydocstyle — enforce docstring conventions (Google style)
+  - repo: https://github.com/PyCQA/pydocstyle
+    rev: 6.3.0
+    hooks:
+      - id: pydocstyle
+        args:
+          - --convention=google
+          - --add-ignore=D100,D101,D102,D103,D104,D105,D107
+        exclude: ^(tests/|setup\.py|docs/)
+
+  # MyPy — static type checking (strict mode)
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+    rev: v1.8.0
     hooks:
       - id: mypy
         additional_dependencies:
           - types-PyYAML
           - types-setuptools
-        args: [--ignore-missing-imports, --check-untyped-defs]
+        args:
+          [
+            --ignore-missing-imports,
+            --check-untyped-defs,
+            --disallow-incomplete-defs,
+            --warn-unused-ignores,
+            --warn-redundant-casts,
+            --no-implicit-optional,
+          ]
         exclude: ^(tests/|setup\.py|docs/)
 
-  # Bandit
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.6
+  # Prettier — format Markdown, YAML, JSON
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
     hooks:
-      - id: bandit
-        args: [-c, pyproject.toml]
-        additional_dependencies: ["bandit[toml]"]
-        exclude: ^tests/
+      - id: prettier
+        types_or: [yaml, markdown, json]
+        exclude: ^(CHANGELOG\.md|LICENSE)$
 
-  # Keep other non-Python hooks as needed (markdownlint, yamllint, etc.)
+  # Markdown lint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
+    rev: v0.38.0
     hooks:
       - id: markdownlint-fix
-        args: [--disable, MD013, MD033, MD041]
+        args: [--disable, MD013, MD033, MD041, --]
 
+  # YAML lint
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.37.1
+    rev: v1.33.0
     hooks:
       - id: yamllint
         args:
           [
             -d,
-            "{extends: default, rules: {line-length: {max: 120}, document-start: disable}}",
+            "{extends: default, rules: {line-length: {max: 100}, document-start: disable}}",
           ]
 
+  # Shell script lint
   - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
+    rev: v0.9.0.6
     hooks:
       - id: shellcheck
 
+  # Optional: detect secrets / large commits
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+
+  # Conventional commits
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
+    rev: v3.0.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

@@ -208,6 +208,8 @@ def main() -> None:
     # Create dataset
     if args.dataset_type == "rain100":
         dataset = Rain100Dataset(root_dir=data_dir, transform=transform)
+    elif args.dataset_type == "rain1400":
+        dataset = Rain100Dataset(root_dir=data_dir / "val", transform=transform)
     else:  # pair
         dataset = ImagePairDataset(
             rainy_dir=data_dir / args.rainy_dir,
