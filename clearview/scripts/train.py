@@ -91,11 +91,35 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="unet",
-        choices=["unet", "attention_unet"],
+        choices=[
+            "unet",
+            "attention_unet",
+            "resnet_unet",
+            "resnet18_unet",
+            "resnet34_unet",
+            "resnet50_unet",
+            "resnet101_unet",
+            "resnet152_unet",
+        ],
         help="Model architecture",
     )
     model_group.add_argument("--in-channels", type=int, default=3, help="Number of input channels")
     model_group.add_argument("--out-channels", type=int, default=3, help="Number of output channels")
+
+    model_group.add_argument(
+        "--backbone",
+        type=str,
+        default="resnet34",
+        choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
+        help="ResNet backbone (only used with resnet_unet model)",
+    )
+
+    model_group.add_argument(
+        "--pretrained",
+        action="store_true",
+        default=True,
+        help="Use ImageNet pretrained weights for ResNet backbone",
+    )
 
     # Training arguments
     train_group = parser.add_argument_group("Training")

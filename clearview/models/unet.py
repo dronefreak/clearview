@@ -42,7 +42,7 @@ class UNet(BaseModel):
         in_channels: int = 3,
         out_channels: int = 3,
         features: Optional[List[int]] = None,
-        use_transpose_conv: bool = True,
+        use_transpose_conv: bool = False,
         use_batchnorm: bool = True,
         activation: str = "relu",
     ) -> None:

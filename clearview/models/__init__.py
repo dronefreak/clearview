@@ -4,18 +4,24 @@ This module provides various encoder-decoder architectures optimized for
 image restoration tasks, including U-Net and attention-based variants.
 """
 
-from typing import Dict, List, Any, Type
+from typing import Any, Dict, List, Type
 
-
-from clearview.models.base import BaseModel
-from clearview.models.unet import UNet
 from clearview.models.attention_unet import AttentionUNet
+from clearview.models.base import BaseModel
+from clearview.models.resnet_unet import ResNetUNet, create_resnet_unet
+from clearview.models.unet import UNet
 
 # Model registry for factory pattern
 _MODEL_REGISTRY: Dict[str, Type[BaseModel]] = {
     "unet": UNet,
     "attention_unet": AttentionUNet,
     "attn_unet": AttentionUNet,  # Alias
+    "resnet_unet": ResNetUNet,
+    "resnet18_unet": lambda **kwargs: ResNetUNet(backbone="resnet18", **kwargs),
+    "resnet34_unet": lambda **kwargs: ResNetUNet(backbone="resnet34", **kwargs),
+    "resnet50_unet": lambda **kwargs: ResNetUNet(backbone="resnet50", **kwargs),
+    "resnet101_unet": lambda **kwargs: ResNetUNet(backbone="resnet101", **kwargs),
+    "resnet152_unet": lambda **kwargs: ResNetUNet(backbone="resnet152", **kwargs),
 }
 
 
@@ -85,8 +91,10 @@ __all__ = [
     # Models
     "UNet",
     "AttentionUNet",
+    "ResNetUNet",
     # Factory functions
     "register_model",
     "get_model",
     "list_models",
+    "create_resnet_unet",
 ]
