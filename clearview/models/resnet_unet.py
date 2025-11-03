@@ -268,6 +268,7 @@ class ResNetUNet(nn.Module):
             param.requires_grad = False
         for param in self.encoder4.parameters():
             param.requires_grad = False
+        print("Encoder frozen!.")
 
     def unfreeze_encoder(self) -> None:
         """Unfreeze encoder weights."""
@@ -281,6 +282,7 @@ class ResNetUNet(nn.Module):
             param.requires_grad = True
         for param in self.encoder4.parameters():
             param.requires_grad = True
+        print("Encoder unfrozen!.")
 
 
 # ============================================================================
@@ -335,6 +337,16 @@ if __name__ == "__main__":
         print("-" * 40)
 
         model = create_resnet_unet(backbone=backbone, pretrained=False)
+        if backbone == "resnet18":
+            weights = "experiments/resnet18_unet_rain1400/checkpoints/best_val_psnr.pth"
+            checkpoint = torch.load(weights, map_location="cpu")
+            # Handle different checkpoint formats
+            if "model_state_dict" in checkpoint:
+                model.load_state_dict(checkpoint["model_state_dict"])
+                print("Loaded weights from checkpoint.")
+            else:
+                model.load_state_dict(checkpoint)
+                print("Loaded weights from raw checkpoint.")
 
         # Test forward pass
         x = torch.randn(2, 3, 256, 256)
