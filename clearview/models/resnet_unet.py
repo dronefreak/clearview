@@ -108,6 +108,10 @@ class ResNetUNet(nn.Module):
         """
         super().__init__()
 
+        # ImageNet normalization parameters
+        self.register_buffer("imagenet_mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer("imagenet_std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.backbone_name = backbone
@@ -204,6 +208,9 @@ class ResNetUNet(nn.Module):
         # ENCODER
         # ====================================================================
 
+        # Normalize from [0,1] to ImageNet distribution
+        x = (x - self.imagenet_mean) / self.imagenet_std
+
         # Initial conv + pool
         e0 = self.encoder0(x)  # H/2, W/2
         e0_pooled = self.encoder0_pool(e0)  # H/4, W/4
@@ -297,7 +304,7 @@ def create_resnet_unet(
     return ResNetUNet(
         in_channels=in_channels,
         out_channels=out_channels,
-        backbone=backbone,
+        backbone=backbone,  # type: ignore[arg-type]
         pretrained=pretrained,
     )
 
