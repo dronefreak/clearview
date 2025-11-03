@@ -10,7 +10,6 @@ from typing import List
 import torch
 from tqdm import tqdm
 
-
 from clearview.api import DerainingModel
 
 logger = logging.getLogger(__name__)
@@ -27,26 +26,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        required=True,
-        choices=["unet", "attention_unet"],
+        default="unet",
+        choices=[
+            "unet",
+            "attention_unet",
+            "resnet_unet",
+            "resnet18_unet",
+            "resnet34_unet",
+            "resnet50_unet",
+            "resnet101_unet",
+            "resnet152_unet",
+        ],
         help="Model architecture",
     )
-    parser.add_argument(
-        "--weights", type=str, required=True, help="Path to model weights"
-    )
+    parser.add_argument("--weights", type=str, required=True, help="Path to model weights")
 
     # Input/Output arguments
     input_group = parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--input", type=str, help="Input image path")
-    input_group.add_argument(
-        "--input-dir", type=str, help="Input directory containing images"
-    )
+    input_group.add_argument("--input-dir", type=str, help="Input directory containing images")
 
     output_group = parser.add_mutually_exclusive_group(required=True)
     output_group.add_argument("--output", type=str, help="Output image path")
-    output_group.add_argument(
-        "--output-dir", type=str, help="Output directory for processed images"
-    )
+    output_group.add_argument("--output-dir", type=str, help="Output directory for processed images")
 
     # Processing arguments
     parser.add_argument(
@@ -61,9 +63,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Save side-by-side comparison (input + output)",
     )
-    parser.add_argument(
-        "--recursive", action="store_true", help="Process subdirectories recursively"
-    )
+    parser.add_argument("--recursive", action="store_true", help="Process subdirectories recursively")
 
     # Performance arguments
     parser.add_argument(
@@ -73,16 +73,12 @@ def parse_args() -> argparse.Namespace:
         choices=["cuda", "cpu"],
         help="Device to run inference on",
     )
-    parser.add_argument(
-        "--benchmark", action="store_true", help="Benchmark inference speed"
-    )
+    parser.add_argument("--benchmark", action="store_true", help="Benchmark inference speed")
 
     return parser.parse_args()
 
 
-def get_image_files(
-    input_dir: Path, extensions: List[str], recursive: bool = False
-) -> List[Path]:
+def get_image_files(input_dir: Path, extensions: List[str], recursive: bool = False) -> List[Path]:
     """Get list of image files from directory."""
     image_files: List[Path] = []
 
@@ -115,9 +111,8 @@ def process_single_image(
     # Process image
     if save_comparison:
         # Load input for comparison
-        from PIL import Image
-
         import numpy as np
+        from PIL import Image
 
         rainy_img = np.array(Image.open(input_path).convert("RGB"))
 
@@ -125,9 +120,7 @@ def process_single_image(
         derained_img = model.process(input_path, output_path=output_path)
 
         # Save comparison
-        comparison_path = (
-            output_path.parent / f"{output_path.stem}_comparison{output_path.suffix}"
-        )
+        comparison_path = output_path.parent / f"{output_path.stem}_comparison{output_path.suffix}"
 
         from clearview.utils.image import numpy_to_tensor
         from clearview.utils.visualization import (
@@ -137,9 +130,7 @@ def process_single_image(
         rainy_tensor = numpy_to_tensor(rainy_img.astype(np.float32) / 255.0)
         derained_tensor = numpy_to_tensor(derained_img.astype(np.float32) / 255.0)
 
-        save_comparison_util(
-            rainy_tensor, derained_tensor, clean=None, save_path=comparison_path
-        )
+        save_comparison_util(rainy_tensor, derained_tensor, clean=None, save_path=comparison_path)
     else:
         # Just process
         model.process(input_path, output_path=output_path)
@@ -171,9 +162,7 @@ def main() -> None:
     logger.info(f"  Weights: {args.weights}")
     logger.info(f"  Device: {args.device}")
 
-    model = DerainingModel.from_pretrained(
-        model_name=args.model, weights=args.weights, device=args.device
-    )
+    model = DerainingModel.from_pretrained(model_name=args.model, weights=args.weights, device=args.device)
 
     logger.info("Model loaded successfully!")
 
@@ -203,10 +192,7 @@ def main() -> None:
             logger.info(f"Inference time: {inference_time:.3f}s")
 
         if args.save_comparison:
-            comparison_path = (
-                output_path.parent
-                / f"{output_path.stem}_comparison{output_path.suffix}"
-            )
+            comparison_path = output_path.parent / f"{output_path.stem}_comparison{output_path.suffix}"
             logger.info(f"Comparison saved to: {comparison_path}")
 
     else:
@@ -220,9 +206,7 @@ def main() -> None:
 
         # Get image files
         logger.info(f"\nScanning directory: {input_dir}")
-        image_files = get_image_files(
-            input_dir, args.extensions, recursive=args.recursive
-        )
+        image_files = get_image_files(input_dir, args.extensions, recursive=args.recursive)
 
         if not image_files:
             logger.error(f"No images found in {input_dir}")
@@ -262,9 +246,7 @@ def main() -> None:
                 # Update progress bar
                 if args.benchmark:
                     avg_time = total_time / (pbar.n + 1)
-                    pbar.set_postfix(
-                        {"avg_time": f"{avg_time:.3f}s", "fps": f"{1 / avg_time:.1f}"}
-                    )
+                    pbar.set_postfix({"avg_time": f"{avg_time:.3f}s", "fps": f"{1 / avg_time:.1f}"})
 
             except Exception as e:
                 logger.error(f"Failed to process {img_path}: {e}")

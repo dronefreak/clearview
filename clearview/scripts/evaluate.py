@@ -36,8 +36,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         type=str,
-        required=True,
-        choices=["unet", "attention_unet"],
+        default="unet",
+        choices=[
+            "unet",
+            "attention_unet",
+            "resnet_unet",
+            "resnet18_unet",
+            "resnet34_unet",
+            "resnet50_unet",
+            "resnet101_unet",
+            "resnet152_unet",
+        ],
         help="Model architecture",
     )
     parser.add_argument("--weights", type=str, required=True, help="Path to model weights")

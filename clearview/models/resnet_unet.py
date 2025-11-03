@@ -235,6 +235,15 @@ class ResNetUNet(nn.Module):
         out = self.output(d0)  # H, W
         out = self.final_activation(out)
 
+        ## Debug shapes
+        # print(f"e0 (before pool): {e0.shape}")
+        # print(f"e0_pooled: {e0_pooled.shape}")
+        # print(f"e1: {e1.shape}")
+        # print(f"e2: {e2.shape}")
+        # print(f"e3: {e3.shape}")
+        # print(f"e4 (bottleneck): {e4.shape}")
+        # print(f"d4: {d4.shape}")
+
         return out
 
     def get_num_params(self) -> int:

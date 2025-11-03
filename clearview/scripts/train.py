@@ -121,6 +121,11 @@ def parse_args() -> argparse.Namespace:
         help="Use ImageNet pretrained weights for ResNet backbone",
     )
 
+    model_group.add_argument("--freeze-encoder", action="store_true", help="Freeze encoder (train decoder only)")
+    model_group.add_argument(
+        "--unfreeze-encoder", action="store_true", help="Unfreeze encoder (for stage 2 fine-tuning)"
+    )
+
     # Training arguments
     train_group = parser.add_argument_group("Training")
     train_group.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
@@ -322,6 +327,14 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
 def setup_model(args: argparse.Namespace) -> nn.Module:
     """Setup model."""
     model = get_model(args.model, in_channels=args.in_channels, out_channels=args.out_channels)
+
+    if args.freeze_encoder and hasattr(model, "freeze_encoder"):
+        model.freeze_encoder()
+        logger.info("Encoder frozen - training decoder only")
+
+    if args.unfreeze_encoder and hasattr(model, "unfreeze_encoder"):
+        model.unfreeze_encoder()
+        logger.info("Encoder unfrozen - training full network")
 
     logger.info(f"Model: {args.model}")
     logger.info(f"Parameters: {model.get_num_params():,}")
