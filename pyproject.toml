@@ -10,10 +10,10 @@ readme = ".github/README.md"
 requires-python = ">=3.8"
 license = "Apache-2.0"
 authors = [
-    {name = "ClearView Contributors", email = "clearview@example.com"}
+    {name = "ClearView Contributors", email = "kumaar324@gmail.com"}
 ]
 maintainers = [
-    {name = "ClearView Contributors", email = "clearview@example.com"}
+    {name = "ClearView Contributors", email = "kumaar324@gmail.com"}
 ]
 keywords = [
     "deep-learning",

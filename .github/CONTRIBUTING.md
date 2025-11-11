@@ -92,7 +92,7 @@ Look for issues labeled `good first issue` if you're new to the project. These a
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/YOUR_USERNAME/clearview.git
+git clone https://github.com/dronefreak/clearview.git
 cd clearview
 ```
 
