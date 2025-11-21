@@ -4,7 +4,7 @@ Provides flexible combination of multiple loss components for comprehensive
 image restoration objectives.
 """
 
-from typing import Any, Dict, Optional, cast, Type
+from typing import Any, Dict, Optional, Type, cast
 
 import torch
 import torch.nn as nn
@@ -70,9 +70,7 @@ class CombinedLoss(BaseLoss):
         for name in losses.keys():
             self.loss_weights[name] = weights.get(name, 1.0)
 
-    def forward(
-        self, pred: torch.Tensor, target: torch.Tensor, return_dict: bool = False
-    ) -> torch.Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, return_dict: bool = False) -> torch.Tensor:
         """Compute combined loss.
 
         Args:
@@ -154,10 +152,7 @@ class CombinedLoss(BaseLoss):
             name_lower = name.lower()
 
             if name_lower not in loss_registry:
-                raise ValueError(
-                    f"Unknown loss type: {name}. "
-                    f"Available losses: {list(loss_registry.keys())}"
-                )
+                raise ValueError(f"Unknown loss type: {name}. " f"Available losses: {list(loss_registry.keys())}")
 
             # Extract weight
             loss_weight = loss_config.pop("weight", 1.0)
@@ -180,16 +175,13 @@ class CombinedLoss(BaseLoss):
 
     def __repr__(self) -> str:
         """String representation of combined loss."""
-        components = [
-            f"{name}(weight={self.loss_weights[name]})"
-            for name in self.loss_components.keys()
-        ]
+        components = [f"{name}(weight={self.loss_weights[name]})" for name in self.loss_components.keys()]
         return f"CombinedLoss({', '.join(components)})"
 
 
 # Predefined combinations matching common use cases
 class L1L2SSIMLoss(CombinedLoss):
-    """L1 + L2 + SSIM loss (matching your original TensorFlow implementation).
+    """L1 + L2 + SSIM loss (matching the original TensorFlow implementation).
 
     Example:
         >>> loss_fn = L1L2SSIMLoss()
@@ -211,7 +203,7 @@ class L1L2SSIMLoss(CombinedLoss):
 
 
 class L1L2SSIMEdgeLoss(CombinedLoss):
-    """L1 + L2 + SSIM + Edge loss (matching your TensorFlow implementation).
+    """L1 + L2 + SSIM + Edge loss (matching the TensorFlow implementation).
 
     Example:
         >>> loss_fn = L1L2SSIMEdgeLoss()
@@ -235,7 +227,7 @@ class L1L2SSIMEdgeLoss(CombinedLoss):
 
 
 class L1L2MSSSIMEdgeLoss(CombinedLoss):
-    """L1 + L2 + MS-SSIM + Edge loss (your TensorFlow multi-scale variant).
+    """L1 + L2 + MS-SSIM + Edge loss (the TensorFlow multi-scale variant).
 
     Example:
         >>> loss_fn = L1L2MSSSIMEdgeLoss()

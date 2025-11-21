@@ -58,10 +58,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/clearview"
-Documentation = "https://clearview.readthedocs.io"
-Repository = "https://github.com/yourusername/clearview"
-"Bug Tracker" = "https://github.com/yourusername/clearview/issues"
+Homepage = "https://github.com/dronefreak/clearview"
+Repository = "https://github.com/dronefreak/clearview"
+"Bug Tracker" = "https://github.com/dronefreak/clearview/issues"
 
 [project.scripts]
 clearview-train = "clearview.scripts.train:main"
