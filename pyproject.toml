@@ -76,7 +76,7 @@ clearview = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--strict-markers --cov=clearview --cov-report=term-missing"
+addopts = "--strict-markers"
 
 [tool.black]
 line-length = 88
