@@ -134,7 +134,9 @@ def compute_ssim(
                 for i in range(pred.shape[0]):
                     pred_hwc = pred[i].transpose(1, 2, 0)
                     target_hwc = target[i].transpose(1, 2, 0)
-                    ssim_val = structural_similarity(pred_hwc, target_hwc, data_range=max_val, channel_axis=2)
+                    ssim_val = structural_similarity(
+                        pred_hwc, target_hwc, data_range=max_val, channel_axis=2
+                    )
                     ssim_values.append(ssim_val)
 
                 if reduction == "mean":
@@ -149,7 +151,9 @@ def compute_ssim(
                 )
                 return float(ssim_val)
         except ImportError as err:
-            raise ImportError("scikit-image is required for SSIM computation with NumPy arrays") from err
+            raise ImportError(
+                "scikit-image is required for SSIM computation with NumPy arrays"
+            ) from err
 
 
 def compute_mae(

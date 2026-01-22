@@ -7,10 +7,10 @@ and visualizing deraining results.
 from pathlib import Path
 from typing import List, Optional, Tuple, Union
 
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 from matplotlib.figure import Figure
 
 

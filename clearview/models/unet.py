@@ -167,9 +167,11 @@ class UNetSmall(UNet):
         self,
         in_channels: int = 3,
         out_channels: int = 3,
-        features: Optional[List[int]] = [32, 64, 128, 256],
+        features: Optional[List[int]] = None,
         **kwargs: Any,
     ) -> None:
+        if features is None:
+            features = [64, 128, 256, 512, 1024]
         """Initialize small U-Net."""
         super().__init__(
             in_channels=in_channels,
@@ -180,23 +182,18 @@ class UNetSmall(UNet):
 
 
 class UNetLarge(UNet):
-    """Larger U-Net variant for higher quality.
-
-    Uses more features at each level: [64, 128, 256, 512, 1024]
-
-    Example:
-        >>> model = UNetLarge()
-        >>> print(f"Params: {model.get_num_params():,}")
-    """
+    """Larger U-Net variant for higher quality."""
 
     def __init__(
         self,
         in_channels: int = 3,
         out_channels: int = 3,
-        features: Optional[List[int]] = [64, 128, 256, 512, 1024],
+        features: Optional[List[int]] = None,
         **kwargs: Any,
     ) -> None:
-        """Initialize large U-Net."""
+        if features is None:
+            features = [64, 128, 256, 512, 1024]
+
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,

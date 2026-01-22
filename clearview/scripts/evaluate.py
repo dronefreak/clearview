@@ -12,7 +12,12 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from clearview.api import DerainingModel
-from clearview.data import ImagePairDataset, Rain100Dataset, Rain1400Dataset, get_val_transforms
+from clearview.data import (
+    ImagePairDataset,
+    Rain100Dataset,
+    Rain1400Dataset,
+    get_val_transforms,
+)
 from clearview.utils import (
     MetricsTracker,
     compute_metrics,
@@ -49,10 +54,14 @@ def parse_args() -> argparse.Namespace:
         ],
         help="Model architecture",
     )
-    parser.add_argument("--weights", type=str, required=True, help="Path to model weights")
+    parser.add_argument(
+        "--weights", type=str, required=True, help="Path to model weights"
+    )
 
     # Data arguments
-    parser.add_argument("--data-dir", type=str, required=True, help="Test data directory")
+    parser.add_argument(
+        "--data-dir", type=str, required=True, help="Test data directory"
+    )
     parser.add_argument(
         "--dataset-type",
         type=str,
@@ -60,12 +69,20 @@ def parse_args() -> argparse.Namespace:
         choices=["pair", "rain100", "rain1400"],
         help="Dataset type",
     )
-    parser.add_argument("--rainy-dir", type=str, default="rainy", help="Rainy images subdirectory")
-    parser.add_argument("--clean-dir", type=str, default="clean", help="Clean images subdirectory")
+    parser.add_argument(
+        "--rainy-dir", type=str, default="rainy", help="Rainy images subdirectory"
+    )
+    parser.add_argument(
+        "--clean-dir", type=str, default="clean", help="Clean images subdirectory"
+    )
 
     # Evaluation arguments
-    parser.add_argument("--batch-size", type=int, default=1, help="Batch size for evaluation")
-    parser.add_argument("--num-workers", type=int, default=4, help="Number of data loading workers")
+    parser.add_argument(
+        "--batch-size", type=int, default=1, help="Batch size for evaluation"
+    )
+    parser.add_argument(
+        "--num-workers", type=int, default=4, help="Number of data loading workers"
+    )
     parser.add_argument(
         "--metrics",
         type=str,
@@ -75,10 +92,16 @@ def parse_args() -> argparse.Namespace:
     )
 
     # Output arguments
-    parser.add_argument("--output-dir", type=str, required=True, help="Output directory for results")
+    parser.add_argument(
+        "--output-dir", type=str, required=True, help="Output directory for results"
+    )
     parser.add_argument("--save-images", action="store_true", help="Save output images")
-    parser.add_argument("--num-vis", type=int, default=10, help="Number of images to visualize")
-    parser.add_argument("--save-comparison-grid", action="store_true", help="Save comparison grid")
+    parser.add_argument(
+        "--num-vis", type=int, default=10, help="Number of images to visualize"
+    )
+    parser.add_argument(
+        "--save-comparison-grid", action="store_true", help="Save comparison grid"
+    )
 
     # Device
     parser.add_argument(
@@ -199,7 +222,9 @@ def main() -> None:
     logger.info("Loading model")
     logger.info("=" * 80)
 
-    model = DerainingModel.from_pretrained(model_name=args.model, weights=args.weights, device=args.device)
+    model = DerainingModel.from_pretrained(
+        model_name=args.model, weights=args.weights, device=args.device
+    )
 
     logger.info("Model loaded successfully")
     logger.info(f"Device: {args.device}")
@@ -219,7 +244,9 @@ def main() -> None:
         dataset = Rain100Dataset(root_dir=data_dir, transform=transform)
     elif args.dataset_type == "rain1400":
         dataset = Rain1400Dataset(
-            rainy_dir=data_dir / args.rainy_dir, clean_dir=data_dir / args.clean_dir, transform=transform
+            rainy_dir=data_dir / args.rainy_dir,
+            clean_dir=data_dir / args.clean_dir,
+            transform=transform,
         )
     else:  # pair
         dataset = ImagePairDataset(
@@ -286,15 +313,21 @@ def main() -> None:
     # Create comparison grid
     if args.save_comparison_grid and vis_samples:
         logger.info("\nCreating comparison grid...")
-        fig = create_comparison_grid(vis_samples, max_images=min(len(vis_samples), args.num_vis))
+        fig = create_comparison_grid(
+            vis_samples, max_images=min(len(vis_samples), args.num_vis)
+        )
         grid_path = output_dir / "comparison_grid.png"
         fig.savefig(grid_path, dpi=150, bbox_inches="tight")
         logger.info(f"Comparison grid saved to {grid_path}")
 
     # Plot metric histograms
     logger.info("\nPlotting metric distributions...")
-    plot_metric_histogram(metric_values, save_path=output_dir / "metric_distributions.png")
-    logger.info(f"Metric distributions saved to {output_dir / 'metric_distributions.png'}")
+    plot_metric_histogram(
+        metric_values, save_path=output_dir / "metric_distributions.png"
+    )
+    logger.info(
+        f"Metric distributions saved to {output_dir / 'metric_distributions.png'}"
+    )
 
     logger.info("\n" + "=" * 80)
     logger.info("Evaluation completed successfully!")

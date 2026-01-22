@@ -4,20 +4,20 @@ Provides extensible callback system for model checkpointing, early stopping,
 learning rate scheduling, and custom training behavior.
 """
 
-from abc import ABC
-from pathlib import Path
-from typing import Any, Dict, Optional, Union, List
 import logging
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 
-
 logger = logging.getLogger(__name__)
 
 
+# ruff: noqa: B024, B027
 class Callback(ABC):
     """Base class for training callbacks.
 
@@ -30,28 +30,25 @@ class Callback(ABC):
         ...         print(f"Epoch {epoch} finished!")
     """
 
+    @abstractmethod
+    def on_epoch_end(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
+        """Called at the end of each epoch."""
+        ...
+
+    # Optional hooks — no-op defaults
     def on_train_begin(self, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the beginning of training."""
         pass
 
     def on_train_end(self, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the end of training."""
         pass
 
     def on_epoch_begin(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the beginning of each epoch."""
-        pass
-
-    def on_epoch_end(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the end of each epoch."""
         pass
 
     def on_batch_begin(self, batch: int, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the beginning of each batch."""
         pass
 
     def on_batch_end(self, batch: int, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Called at the end of each batch."""
         pass
 
 

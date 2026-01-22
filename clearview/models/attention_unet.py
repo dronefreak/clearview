@@ -78,9 +78,13 @@ class AttentionUNet(BaseModel):
 
         # Build for each skip level, deepest -> shallowest
         for j in reversed(range(num_skips)):
-            skip_ch = features[j]  # skip channels at this level (j runs  num_skips-1 .. 0)
+            skip_ch = features[
+                j
+            ]  # skip channels at this level (j runs  num_skips-1 .. 0)
             # Attention gate: gating is cur_channels, skip is skip_ch
-            self.attention_gates.append(AttentionGate(gate_channels=cur_channels, skip_channels=skip_ch))
+            self.attention_gates.append(
+                AttentionGate(gate_channels=cur_channels, skip_channels=skip_ch)
+            )
             # UpBlock upsamples cur_channels -> features[j+?], but we want output = features[j]
             # For U-Net, after upsampling we produce features[j] (matching encoder level j)
             self.decoder.append(
@@ -121,7 +125,9 @@ class AttentionUNet(BaseModel):
         # Decoder with attention-weighted skip connections
         # Both self.decoder and self.attention_gates are ordered deepest -> shallowest
         for i, (up, attn_gate) in enumerate(zip(self.decoder, self.attention_gates)):
-            skip = skip_connections[i]  # this skip now has the same spatial size expected by up(x) after upsampling
+            skip = skip_connections[
+                i
+            ]  # this skip now has the same spatial size expected by up(x) after upsampling
             skip_attended = attn_gate(x, skip)
             x = up(x, skip_attended)
 
@@ -145,7 +151,9 @@ class AttentionUNet(BaseModel):
 class AttentionUNetSmall(AttentionUNet):
     """Smaller Attention U-Net variant."""
 
-    def __init__(self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any) -> None:
+    def __init__(
+        self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any
+    ) -> None:
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,
@@ -157,7 +165,9 @@ class AttentionUNetSmall(AttentionUNet):
 class AttentionUNetLarge(AttentionUNet):
     """Larger Attention U-Net variant."""
 
-    def __init__(self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any) -> None:
+    def __init__(
+        self, in_channels: int = 3, out_channels: int = 3, **kwargs: Any
+    ) -> None:
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,

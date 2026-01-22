@@ -210,7 +210,9 @@ class UpBlock(nn.Module):
 
         # Upsampling
         if use_transpose_conv:
-            self.up: nn.Module = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+            self.up: nn.Module = nn.ConvTranspose2d(
+                in_channels, out_channels, kernel_size=2, stride=2
+            )
         else:
             self.up = nn.Sequential(
                 nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True),
@@ -344,7 +346,9 @@ class AttentionGate(nn.Module):
 
         # Upsample gating signal if necessary
         if g1.size(2) != x1.size(2) or g1.size(3) != x1.size(3):
-            g1 = F.interpolate(g1, size=x1.shape[2:], mode="bilinear", align_corners=True)
+            g1 = F.interpolate(
+                g1, size=x1.shape[2:], mode="bilinear", align_corners=True
+            )
 
         # Attention coefficients
         psi = self.relu(g1 + x1)

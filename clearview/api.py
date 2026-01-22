@@ -5,15 +5,15 @@ and processing images without dealing with low-level details.
 """
 
 from pathlib import Path
-from typing import Optional, Union, Any
+from typing import Any, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 from PIL import Image
 
 from clearview.models import get_model
-from clearview.utils.image import numpy_to_tensor, tensor_to_numpy, pad_to_multiple
+from clearview.utils.image import numpy_to_tensor, pad_to_multiple, tensor_to_numpy
 
 
 class DerainingModel:

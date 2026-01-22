@@ -4,17 +4,16 @@ Provides dataset classes for loading paired rainy/clean images from
 various formats (image pairs, directories, etc.).
 """
 
+import logging
 from pathlib import Path
 from typing import Callable, Optional, Tuple, Union
-import logging
 
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
 import numpy as np
+import torch
+from PIL import Image
+from torch.utils.data import Dataset
 
 from clearview.utils.image import numpy_to_tensor
-
 
 logger = logging.getLogger(__name__)
 
@@ -407,6 +406,7 @@ class Rain1400Dataset(Dataset):
         clean_tensor = numpy_to_tensor(clean_np)
 
         return rainy_tensor, clean_tensor
+
 
 __all__ = [
     "ImagePairDataset",

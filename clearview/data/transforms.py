@@ -3,9 +3,10 @@
 Provides augmentation pipelines for training image deraining models.
 """
 
-from typing import Dict, Optional, Tuple, List, Any
 import random
+from typing import Any, Dict, List, Optional, Tuple
 
+import cv2
 import numpy as np
 
 
@@ -212,8 +213,6 @@ class Resize(PairedTransform):
     ) -> Dict[str, np.ndarray]:
         """Apply resize."""
         try:
-            import cv2
-
             image = cv2.resize(
                 image, (self.size[1], self.size[0]), interpolation=cv2.INTER_LINEAR
             )
@@ -224,8 +223,10 @@ class Resize(PairedTransform):
                     target, (self.size[1], self.size[0]), interpolation=cv2.INTER_LINEAR
                 )
                 result["target"] = target
-        except ImportError:
-            raise ImportError("OpenCV (cv2) is required for resize transform")
+        except ImportError as e:
+            raise ImportError(
+                "cv2 is required for Resize transform. Please install opencv-python."
+            ) from e
 
         return result
 

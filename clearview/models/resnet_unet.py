@@ -15,7 +15,13 @@ from torchvision import models
 class DecoderBlock(nn.Module):
     """Decoder block with upsampling + conv (no ConvTranspose2d to avoid artifacts)."""
 
-    def __init__(self, in_channels: int, skip_channels: int, out_channels: int, use_batchnorm: bool = True):
+    def __init__(
+        self,
+        in_channels: int,
+        skip_channels: int,
+        out_channels: int,
+        use_batchnorm: bool = True,
+    ):
         """Initialize decoder block.
 
         Args:
@@ -31,13 +37,19 @@ class DecoderBlock(nn.Module):
 
         # Convolution after concatenation with skip connection
         self.conv1 = nn.Conv2d(
-            in_channels + skip_channels, out_channels, kernel_size=3, padding=1, bias=not use_batchnorm
+            in_channels + skip_channels,
+            out_channels,
+            kernel_size=3,
+            padding=1,
+            bias=not use_batchnorm,
         )
         self.bn1 = nn.BatchNorm2d(out_channels) if use_batchnorm else nn.Identity()
         self.relu1 = nn.ReLU(inplace=True)
 
         # Second convolution for refinement
-        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=not use_batchnorm)
+        self.conv2 = nn.Conv2d(
+            out_channels, out_channels, kernel_size=3, padding=1, bias=not use_batchnorm
+        )
         self.bn2 = nn.BatchNorm2d(out_channels) if use_batchnorm else nn.Identity()
         self.relu2 = nn.ReLU(inplace=True)
 
@@ -56,7 +68,9 @@ class DecoderBlock(nn.Module):
 
         # Handle size mismatch (if skip is slightly different size)
         if x.shape != skip.shape:
-            x = F.interpolate(x, size=skip.shape[2:], mode="bilinear", align_corners=True)
+            x = F.interpolate(
+                x, size=skip.shape[2:], mode="bilinear", align_corners=True
+            )
 
         # Concatenate with skip connection
         x = torch.cat([x, skip], dim=1)
@@ -93,7 +107,9 @@ class ResNetUNet(nn.Module):
         self,
         in_channels: int = 3,
         out_channels: int = 3,
-        backbone: Literal["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"] = "resnet34",
+        backbone: Literal[
+            "resnet18", "resnet34", "resnet50", "resnet101", "resnet152"
+        ] = "resnet34",
         pretrained: bool = True,
         use_batchnorm: bool = True,
     ):
@@ -109,8 +125,12 @@ class ResNetUNet(nn.Module):
         super().__init__()
 
         # ImageNet normalization parameters
-        self.register_buffer("imagenet_mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
-        self.register_buffer("imagenet_std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
+        self.register_buffer(
+            "imagenet_mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+        )
+        self.register_buffer(
+            "imagenet_std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+        )
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -118,7 +138,10 @@ class ResNetUNet(nn.Module):
 
         # Get encoder channels for this backbone
         if backbone not in self.RESNET_CHANNELS:
-            raise ValueError(f"Unsupported backbone: {backbone}. " f"Choose from {list(self.RESNET_CHANNELS.keys())}")
+            raise ValueError(
+                f"Unsupported backbone: {backbone}. "
+                f"Choose from {list(self.RESNET_CHANNELS.keys())}"
+            )
 
         encoder_channels = self.RESNET_CHANNELS[backbone]
 

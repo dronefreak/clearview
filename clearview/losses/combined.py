@@ -70,7 +70,9 @@ class CombinedLoss(BaseLoss):
         for name in losses.keys():
             self.loss_weights[name] = weights.get(name, 1.0)
 
-    def forward(self, pred: torch.Tensor, target: torch.Tensor, return_dict: bool = False) -> torch.Tensor:
+    def forward(
+        self, pred: torch.Tensor, target: torch.Tensor, return_dict: bool = False
+    ) -> torch.Tensor:
         """Compute combined loss.
 
         Args:
@@ -152,7 +154,10 @@ class CombinedLoss(BaseLoss):
             name_lower = name.lower()
 
             if name_lower not in loss_registry:
-                raise ValueError(f"Unknown loss type: {name}. " f"Available losses: {list(loss_registry.keys())}")
+                raise ValueError(
+                    f"Unknown loss type: {name}. "
+                    f"Available losses: {list(loss_registry.keys())}"
+                )
 
             # Extract weight
             loss_weight = loss_config.pop("weight", 1.0)
@@ -175,7 +180,10 @@ class CombinedLoss(BaseLoss):
 
     def __repr__(self) -> str:
         """String representation of combined loss."""
-        components = [f"{name}(weight={self.loss_weights[name]})" for name in self.loss_components.keys()]
+        components = [
+            f"{name}(weight={self.loss_weights[name]})"
+            for name in self.loss_components.keys()
+        ]
         return f"CombinedLoss({', '.join(components)})"
 
 

@@ -14,22 +14,22 @@ __version__ = "1.0.0"
 __author__ = "Saumya Kumaar Saksena"
 __license__ = "Apache-2.0"
 
+from clearview.losses import (
+    CombinedLoss,
+    EdgeLoss,
+    PerceptualLoss,
+    SSIMLoss,
+)
 from clearview.models import (
-    UNet,
     AttentionUNet,
+    UNet,
     get_model,
     list_models,
 )
-from clearview.losses import (
-    CombinedLoss,
-    PerceptualLoss,
-    SSIMLoss,
-    EdgeLoss,
-)
 from clearview.utils import (
+    compute_metrics,
     load_checkpoint,
     save_checkpoint,
-    compute_metrics,
 )
 
 __all__ = [

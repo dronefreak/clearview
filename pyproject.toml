@@ -79,12 +79,12 @@ python_files = ["test_*.py"]
 addopts = "--strict-markers --cov=clearview --cov-report=term-missing"
 
 [tool.black]
-line-length = 120
+line-length = 88
 target-version = ["py38", "py39", "py310", "py311"]
 include = '\.pyi?$'
 
 [tool.ruff]
-line-length = 120
+line-length = 88
 target-version = "py38"
 select = [
     "E",   # pycodestyle errors
