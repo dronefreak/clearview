@@ -1,0 +1,44 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: 'ClearView: Practical Image Deraining with PyTorch'
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Saumya Kumaar
+    family-names: Saksena
+    email: kumaar324@gmail.com
+    orcid: 'https://orcid.org/0000-0003-2213-8265'
+    affiliation: Independent Researcher
+identifiers:
+  - type: url
+    value: 'https://github.com/dronefreak/clearview'
+    description: GitHub repository
+repository-code: 'https://github.com/dronefreak/clearview'
+url: 'https://github.com/dronefreak/clearview'
+abstract: >-
+  ClearView is a PyTorch-based deep learning framework for
+  single-image deraining. It provides modular implementations
+  of state-of-the-art deraining models including U-Net and
+  ResNet-based architectures, along with comprehensive loss
+  functions (perceptual, edge, SSIM) and evaluation metrics
+  (PSNR, SSIM). The framework emphasizes reproducibility,
+  extensive testing (280+ tests, 95% coverage), and production
+  readiness with CI/CD integration.
+keywords:
+  - image deraining
+  - deep learning
+  - pytorch
+  - computer vision
+  - image restoration
+  - rain removal
+  - u-net
+  - resnet
+  - perceptual loss
+  - image processing
+license: Apache-2.0
+version: 1.0.0
+date-released: '2025-01-25'
