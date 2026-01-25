@@ -145,8 +145,19 @@ class ResNetUNet(nn.Module):
 
         encoder_channels = self.RESNET_CHANNELS[backbone]
 
+        # Create a dict of weights from ImageNet
+        weights_dict = {
+            "resnet18": models.ResNet18_Weights.IMAGENET1K_V1,
+            "resnet34": models.ResNet34_Weights.IMAGENET1K_V1,
+            "resnet50": models.ResNet50_Weights.IMAGENET1K_V1,
+            "resnet101": models.ResNet101_Weights.IMAGENET1K_V1,
+            "resnet152": models.ResNet152_Weights.IMAGENET1K_V1,
+        }
+
         # Load pretrained ResNet encoder
-        resnet = getattr(models, backbone)(pretrained=pretrained)
+        resnet = getattr(models, backbone)(
+            weights=weights_dict[backbone] if pretrained else None
+        )
 
         # ====================================================================
         # ENCODER (from ResNet)

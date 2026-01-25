@@ -10,10 +10,10 @@ readme = ".github/README.md"
 requires-python = ">=3.8"
 license = "Apache-2.0"
 authors = [
-    {name = "ClearView Contributors", email = "kumaar324@gmail.com"}
+    {name = "Saumya Saksena", email = "kumaar324@gmail.com"}
 ]
 maintainers = [
-    {name = "ClearView Contributors", email = "kumaar324@gmail.com"}
+    {name = "Saumya Saksena", email = "kumaar324@gmail.com"}
 ]
 keywords = [
     "deep-learning",
@@ -45,6 +45,8 @@ dependencies = [
     "matplotlib>=3.7.0",
     "tqdm>=4.65.0",
     "pyyaml>=6.0",
+    "pytest>=7.3.0",
+    "lark>=1.3.0",
 ]
 
 [project.optional-dependencies]
@@ -76,7 +78,7 @@ clearview = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--strict-markers --cov=clearview --cov-report=term-missing"
+addopts = "--strict-markers"
 
 [tool.black]
 line-length = 88

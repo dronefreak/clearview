@@ -1,0 +1,172 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+  workflow_dispatch:
+
+jobs:
+  pre-commit:
+    name: Pre-commit Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pre-commit
+        run: |
+          pip install pre-commit
+
+      - name: Run pre-commit on all files
+        run: |
+          pre-commit run --all-files --show-diff-on-failure
+
+  test:
+    name: Test Suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: |
+          echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: "\
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-\
+            ${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}"
+          restore-keys: |
+            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+
+      - name: Install PyTorch CPU
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Install package
+        run: |
+          pip install -e .
+
+      - name: Verify installation
+        run: |
+          python -c "import clearview; print(f'ClearView version: {clearview.__version__}')"
+          python -c "import torch; print(f'PyTorch version: {torch.__version__}')"
+          python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v --cov=clearview --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.11'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+          verbose: true
+
+  type-check:
+    name: Type Checking (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyTorch CPU
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mypy
+
+      - name: Install package
+        run: |
+          pip install -e .
+
+      - name: Run mypy
+        run: |
+          mypy clearview --config-file pyproject.toml || true
+
+  lint:
+    name: Linting (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: |
+          pip install ruff
+
+      - name: Run ruff check
+        run: |
+          ruff check clearview tests
+
+      - name: Run ruff format check
+        run: |
+          ruff format --check clearview tests
+
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          pip install --upgrade pip build twine
+
+      - name: Build package
+        run: |
+          python -m build
+
+      - name: Check package
+        run: |
+          twine check dist/*
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/

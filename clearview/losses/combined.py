@@ -64,7 +64,7 @@ class CombinedLoss(BaseLoss):
 
         # Set weights
         if weights is None:
-            weights = {name: 1.0 for name in losses.keys()}
+            weights = dict.fromkeys(losses.keys(), 1.0)
 
         self.loss_weights: Dict[str, float] = {}
         for name in losses.keys():

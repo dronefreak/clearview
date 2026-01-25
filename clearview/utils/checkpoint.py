@@ -12,6 +12,33 @@ import torch.nn as nn
 from torch.optim import Optimizer
 
 
+def _safe_torch_load(
+    filepath: Union[str, Path],
+    map_location: Optional[Union[str, torch.device]] = None,
+    weights_only: bool = False,
+) -> Any:
+    """Load PyTorch checkpoint with version-compatible parameters.
+
+    Handles the weights_only parameter introduced in PyTorch 2.6 for security.
+
+    Args:
+        filepath: Path to checkpoint file
+        map_location: Device to map tensors to
+        weights_only: If True, only load weights (safer). If False, allow arbitrary objects.
+
+    Returns:
+        Loaded checkpoint data
+    """
+    try:
+        # Try with weights_only parameter (PyTorch 2.6+)
+        return torch.load(
+            filepath, map_location=map_location, weights_only=weights_only
+        )
+    except TypeError:
+        # PyTorch < 2.6 doesn't have weights_only parameter
+        return torch.load(filepath, map_location=map_location)
+
+
 def save_checkpoint(
     model: nn.Module,
     optimizer: Optional[Optimizer] = None,
@@ -101,7 +128,10 @@ def load_checkpoint(
     if not filepath.exists():
         raise FileNotFoundError(f"Checkpoint not found: {filepath}")
 
-    checkpoint = torch.load(filepath, map_location=map_location)
+    # Load checkpoint with weights_only=False to allow loading full checkpoint dicts
+    checkpoint = _safe_torch_load(
+        filepath, map_location=map_location, weights_only=False
+    )
 
     # Load model weights
     if model is not None and "model_state_dict" in checkpoint:
@@ -174,11 +204,16 @@ def load_model(
         raise FileNotFoundError(f"Model file not found: {filepath}")
 
     if model is None:
-        # Load entire model
-        model = torch.load(filepath, map_location=map_location)
+        # Load entire model - must use weights_only=False for full model objects
+        model = _safe_torch_load(
+            filepath, map_location=map_location, weights_only=False
+        )
     else:
         # Load weights into existing model
-        state_dict = torch.load(filepath, map_location=map_location)
+        # Use weights_only=True for security when loading just state dict
+        state_dict = _safe_torch_load(
+            filepath, map_location=map_location, weights_only=True
+        )
         model.load_state_dict(state_dict, strict=strict)
 
     return model
