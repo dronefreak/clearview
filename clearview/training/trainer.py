@@ -76,6 +76,7 @@ class Trainer:
         metrics: Optional[List[str]] = None,
         gradient_clip_val: Optional[float] = None,
         mixed_precision: bool = False,
+        accumulation_steps: int = 1,
     ) -> None:
         """Initialize trainer."""
         self.model = model.to(device)
@@ -84,6 +85,7 @@ class Trainer:
         self.device = device
         self.gradient_clip_val = gradient_clip_val
         self.mixed_precision = mixed_precision
+        self.accumulation_steps = max(1, accumulation_steps)
 
         # Metrics
         self.metrics = metrics or ["psnr", "ssim"]
@@ -94,9 +96,19 @@ class Trainer:
         # Set model/optimizer in callbacks that need it
         for callback in callbacks or []:
             if hasattr(callback, "set_model"):
-                callback.set_model(self.model)
+                try:
+                    callback.set_model(self.model)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to set model on {callback.__class__.__name__}: {e}"
+                    )
             if hasattr(callback, "set_optimizer"):
-                callback.set_optimizer(self.optimizer)
+                try:
+                    callback.set_optimizer(self.optimizer)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to set optimizer on {callback.__class__.__name__}: {e}"
+                    )
 
         # Mixed precision scaler
         self.scaler = torch.cuda.amp.GradScaler() if mixed_precision else None
@@ -126,6 +138,9 @@ class Trainer:
         metrics_tracker = MetricsTracker()
 
         pbar = tqdm(train_loader, desc=f"Epoch {self.epoch} [Train]")
+        num_batches = len(train_loader)
+
+        self.optimizer.zero_grad()
 
         for batch_idx, batch in enumerate(pbar):
             # Get data
@@ -138,42 +153,46 @@ class Trainer:
             # Callback
             self.callbacks.on_batch_begin(batch_idx)
 
-            # Forward pass
-            self.optimizer.zero_grad()
+            is_last_batch = (batch_idx + 1) == num_batches
+            should_step = (
+                batch_idx + 1
+            ) % self.accumulation_steps == 0 or is_last_batch
 
+            # Forward pass
             if self.mixed_precision:
                 with torch.cuda.amp.autocast():
                     output = self.model(rainy)
                     loss = self.loss_fn(output, clean)
 
-                # Backward pass
-                self.scaler.scale(loss).backward()
+                # Scale loss for accumulation, then backpropagate
+                scaled_loss = loss / self.accumulation_steps
+                self.scaler.scale(scaled_loss).backward()
 
-                # Gradient clipping
-                if self.gradient_clip_val is not None:
-                    self.scaler.unscale_(self.optimizer)
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.gradient_clip_val
-                    )
-
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                if should_step:
+                    if self.gradient_clip_val is not None:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.gradient_clip_val
+                        )
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad()
             else:
                 output = self.model(rainy)
                 loss = self.loss_fn(output, clean)
 
-                # Backward pass
-                loss.backward()
+                # Scale loss for accumulation, then backpropagate
+                (loss / self.accumulation_steps).backward()
 
-                # Gradient clipping
-                if self.gradient_clip_val is not None:
-                    torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), self.gradient_clip_val
-                    )
+                if should_step:
+                    if self.gradient_clip_val is not None:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.gradient_clip_val
+                        )
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
 
-                self.optimizer.step()
-
-            # Track loss
+            # Track unscaled loss
             loss_tracker.update({"loss": loss.item()}, batch_size=rainy.size(0))
 
             # Compute metrics
@@ -334,6 +353,10 @@ class Trainer:
             logger.info("Training interrupted by user")
 
         finally:
+            if self.scaler is not None:
+                logger.debug(
+                    f"GradScaler final state — scale: {self.scaler.get_scale():.1f}"
+                )
             self.callbacks.on_train_end()
 
         return self.history

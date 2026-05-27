@@ -60,12 +60,34 @@ class ImagePairDataset(Dataset):
         self.extensions = extensions
 
         # Get image file lists
+        try:
+            rainy_entries = list(self.rainy_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Rainy directory not found: {self.rainy_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read rainy directory '{self.rainy_dir}': {e}"
+            ) from e
+
+        try:
+            clean_entries = list(self.clean_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Clean directory not found: {self.clean_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read clean directory '{self.clean_dir}': {e}"
+            ) from e
+
         self.rainy_files = sorted(
-            [f for f in self.rainy_dir.iterdir() if f.suffix.lower() in extensions]
+            [f for f in rainy_entries if f.suffix.lower() in extensions]
         )
 
         self.clean_files = sorted(
-            [f for f in self.clean_dir.iterdir() if f.suffix.lower() in extensions]
+            [f for f in clean_entries if f.suffix.lower() in extensions]
         )
 
         # Validate that filenames match between rainy and clean directories
@@ -270,8 +292,19 @@ class SyntheticRainDataset(Dataset):
         self.transform = transform
         self.extensions = extensions
 
+        try:
+            clean_entries = list(self.clean_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Clean directory not found: {self.clean_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read clean directory '{self.clean_dir}': {e}"
+            ) from e
+
         self.clean_files = sorted(
-            [f for f in self.clean_dir.iterdir() if f.suffix.lower() in extensions]
+            [f for f in clean_entries if f.suffix.lower() in extensions]
         )
 
         logger.info(f"Loaded {len(self.clean_files)} clean images for synthetic rain")
@@ -363,13 +396,21 @@ class Rain1400Dataset(Dataset):
         self.extensions = extensions
 
         # Get image file lists
+        try:
+            rainy_entries = list(self.rainy_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Rainy directory not found: {self.rainy_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read rainy directory '{self.rainy_dir}': {e}"
+            ) from e
+
         self.rainy_files = sorted(
-            [f for f in self.rainy_dir.iterdir() if f.suffix.lower() in extensions]
+            [f for f in rainy_entries if f.suffix.lower() in extensions]
         )
 
-        self.clean_files = sorted(
-            [f for f in self.clean_dir.iterdir() if f.suffix.lower() in extensions]
-        )
         self.clean_files = []
         for item in self.rainy_files:
             filename = item.name.split("_")[0] + ".jpg"

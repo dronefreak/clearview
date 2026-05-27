@@ -52,8 +52,8 @@ def compute_psnr(
             return psnr.mean().item()
         return psnr
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         # NumPy implementation
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mse_np = np.mean((pred - target) ** 2, axis=axis_tuple)
@@ -186,8 +186,8 @@ def compute_mae(
             return mae.mean().item()
         return mae
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mae_np: np.ndarray = np.mean(np.abs(pred - target), axis=axis_tuple)
 
@@ -226,8 +226,8 @@ def compute_mse(
             return mse.mean().item()
         return mse
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mse_np: np.ndarray = np.mean((pred - target) ** 2, axis=axis_tuple)
 
