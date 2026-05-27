@@ -68,11 +68,21 @@ class ImagePairDataset(Dataset):
             [f for f in self.clean_dir.iterdir() if f.suffix.lower() in extensions]
         )
 
-        # Validate
-        if len(self.rainy_files) != len(self.clean_files):
+        # Validate that filenames match between rainy and clean directories
+        rainy_names = {f.stem for f in self.rainy_files}
+        clean_names = {f.stem for f in self.clean_files}
+        only_in_rainy = rainy_names - clean_names
+        only_in_clean = clean_names - rainy_names
+
+        if only_in_rainy or only_in_clean:
+            details = []
+            if only_in_rainy:
+                details.append(f"only in rainy: {sorted(only_in_rainy)}")
+            if only_in_clean:
+                details.append(f"only in clean: {sorted(only_in_clean)}")
             raise ValueError(
-                f"Mismatch in number of images: "
-                f"{len(self.rainy_files)} rainy vs {len(self.clean_files)} clean"
+                f"Unpaired images found ({'; '.join(details)}). "
+                "Rainy and clean directories must contain matching filenames."
             )
 
         logger.info(f"Loaded {len(self.rainy_files)} image pairs")

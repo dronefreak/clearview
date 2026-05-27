@@ -112,10 +112,23 @@ class DerainingModel:
         """
         # Load image
         if isinstance(image, (str, Path)):
-            image = Image.open(image).convert("RGB")
+            try:
+                image = Image.open(image).convert("RGB")
+            except FileNotFoundError as err:
+                raise FileNotFoundError(f"Image file not found: {image}") from err
+            except OSError as e:
+                raise ValueError(f"Cannot open image file '{image}': {e}") from e
             image = np.array(image)
         elif isinstance(image, Image.Image):
             image = np.array(image.convert("RGB"))
+
+        # Validate shape
+        if image.ndim != 3 or image.shape[2] != 3:
+            raise ValueError(
+                f"Expected RGB image with shape (H, W, 3), got shape {image.shape}"
+            )
+        if image.size == 0:
+            raise ValueError("Input image is empty")
 
         # Normalize to [0, 1]
         if image.dtype == np.uint8:
@@ -133,10 +146,9 @@ class DerainingModel:
 
         # Unpad
         left, right, top, bottom = pad_vals
-        if right > 0:
-            output = output[:, :, top : -bottom if bottom > 0 else None, left:-right]
-        else:
-            output = output[:, :, top : -bottom if bottom > 0 else None, left:]
+        h_end = output.shape[2] - bottom if bottom > 0 else output.shape[2]
+        w_end = output.shape[3] - right if right > 0 else output.shape[3]
+        output = output[:, :, top:h_end, left:w_end]
 
         # Convert to numpy
         output_np = tensor_to_numpy(output[0])  # Remove batch dimension
@@ -180,10 +192,9 @@ class DerainingModel:
 
         # Unpad
         left, right, top, bottom = pad_vals
-        if right > 0:
-            output = output[:, :, top : -bottom if bottom > 0 else None, left:-right]
-        else:
-            output = output[:, :, top : -bottom if bottom > 0 else None, left:]
+        h_end = output.shape[2] - bottom if bottom > 0 else output.shape[2]
+        w_end = output.shape[3] - right if right > 0 else output.shape[3]
+        output = output[:, :, top:h_end, left:w_end]
 
         return output.clamp(0, 1)
 
