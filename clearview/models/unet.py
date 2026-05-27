@@ -170,9 +170,9 @@ class UNetSmall(UNet):
         features: Optional[List[int]] = None,
         **kwargs: Any,
     ) -> None:
-        if features is None:
-            features = [64, 128, 256, 512, 1024]
         """Initialize small U-Net."""
+        if features is None:
+            features = [32, 64, 128, 256]
         super().__init__(
             in_channels=in_channels,
             out_channels=out_channels,

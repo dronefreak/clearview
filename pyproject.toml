@@ -78,7 +78,7 @@ clearview = ["py.typed"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-addopts = "--strict-markers"
+addopts = "--strict-markers -p no:launch_testing -p no:launch_ros"
 
 [tool.black]
 line-length = 88

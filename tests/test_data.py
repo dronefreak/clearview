@@ -38,7 +38,7 @@ class TestImagePairDataset:
         )
         img.save(clean_dir / "image_000.png")
 
-        with pytest.raises(ValueError, match="Mismatch in number of images"):
+        with pytest.raises(ValueError, match="Unpaired images found"):
             ImagePairDataset(rainy_dir=rainy_dir, clean_dir=clean_dir)
 
     def test_length(self, sample_dataset_dir: Path) -> None:
