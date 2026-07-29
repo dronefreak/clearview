@@ -14,6 +14,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from clearview.training.callbacks import Callback, CallbackList
+from clearview.training.ema import ExponentialMovingAverage
 from clearview.utils.logger import get_logger
 from clearview.utils.metrics import MetricsTracker, compute_metrics
 
@@ -35,6 +36,24 @@ class Trainer:
         metrics: List of metrics to compute (e.g., ['psnr', 'ssim'])
         gradient_clip_val: Max gradient norm for clipping (None = no clipping)
         mixed_precision: Use automatic mixed precision (AMP)
+        accumulation_steps: Number of batches to accumulate gradients over
+            before an optimizer step (simulates a larger batch size)
+        use_ema: Track an exponential moving average (EMA) of model weights,
+            typically yielding better-generalizing weights for validation
+            and final checkpoints
+        ema_decay: EMA decay rate (higher = smoother/longer averaging window)
+        ema_update_after_step: Number of optimizer steps to skip before EMA
+            tracking begins
+        ema_use_warmup: Ramp the effective EMA decay up gradually during
+            early training instead of using the full decay from step 1
+        validate_with_ema: If True (default) and ``use_ema`` is enabled,
+            validation runs with the EMA weights instead of the raw
+            training weights
+        compile_model: Wrap the model with ``torch.compile()`` for
+            potentially faster training/inference (PyTorch 2.x). Falls
+            back to eager mode with a warning if compilation fails.
+        compile_kwargs: Extra keyword arguments forwarded to
+            ``torch.compile()`` (e.g. ``{'mode': 'reduce-overhead'}``)
 
     Example:
         >>> from clearview import UNet
@@ -77,6 +96,13 @@ class Trainer:
         gradient_clip_val: Optional[float] = None,
         mixed_precision: bool = False,
         accumulation_steps: int = 1,
+        use_ema: bool = False,
+        ema_decay: float = 0.999,
+        ema_update_after_step: int = 0,
+        ema_use_warmup: bool = True,
+        validate_with_ema: bool = True,
+        compile_model: bool = False,
+        compile_kwargs: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize trainer."""
         self.model = model.to(device)
@@ -86,6 +112,33 @@ class Trainer:
         self.gradient_clip_val = gradient_clip_val
         self.mixed_precision = mixed_precision
         self.accumulation_steps = max(1, accumulation_steps)
+
+        # Optionally compile the model for faster training/inference
+        # (PyTorch 2.x). Falls back gracefully with a warning if
+        # torch.compile is unavailable or fails on this platform/model.
+        self.compiled = False
+        if compile_model:
+            try:
+                self.model = torch.compile(self.model, **(compile_kwargs or {}))
+                self.compiled = True
+            except Exception as e:
+                logger.warning(
+                    f"torch.compile() failed, falling back to eager mode: {e}"
+                )
+
+        # Exponential moving average of model weights
+        self.use_ema = use_ema
+        self.validate_with_ema = validate_with_ema
+        self.ema: Optional[ExponentialMovingAverage] = (
+            ExponentialMovingAverage(
+                self.raw_model,
+                decay=ema_decay,
+                update_after_step=ema_update_after_step,
+                use_warmup=ema_use_warmup,
+            )
+            if use_ema
+            else None
+        )
 
         # Metrics
         self.metrics = metrics or ["psnr", "ssim"]
@@ -122,6 +175,17 @@ class Trainer:
         for metric in self.metrics:
             self.history[f"train_{metric}"] = []
             self.history[f"val_{metric}"] = []
+
+    @property
+    def raw_model(self) -> nn.Module:
+        """Return the underlying model, unwrapped from ``torch.compile()``.
+
+        ``torch.compile()`` wraps the model in an ``OptimizedModule`` whose
+        ``state_dict()`` keys are prefixed with ``_orig_mod.``. Using the raw
+        module for EMA and checkpointing keeps checkpoints portable across
+        compiled/eager runs.
+        """
+        return getattr(self.model, "_orig_mod", self.model)
 
     def train_epoch(self, train_loader: DataLoader) -> Dict[str, float]:
         """Train for one epoch.
@@ -177,6 +241,9 @@ class Trainer:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad()
+
+                    if self.ema is not None:
+                        self.ema.update(self.raw_model)
             else:
                 output = self.model(rainy)
                 loss = self.loss_fn(output, clean)
@@ -191,6 +258,9 @@ class Trainer:
                         )
                     self.optimizer.step()
                     self.optimizer.zero_grad()
+
+                    if self.ema is not None:
+                        self.ema.update(self.raw_model)
 
             # Track unscaled loss
             loss_tracker.update({"loss": loss.item()}, batch_size=rainy.size(0))
@@ -314,7 +384,14 @@ class Trainer:
                 # Validate
                 val_metrics = None
                 if val_loader is not None:
-                    val_metrics = self.validate_epoch(val_loader)
+                    if self.ema is not None and self.validate_with_ema:
+                        ema_backup = self.ema.apply_shadow(self.raw_model)
+                        try:
+                            val_metrics = self.validate_epoch(val_loader)
+                        finally:
+                            self.ema.restore(self.raw_model, ema_backup)
+                    else:
+                        val_metrics = self.validate_epoch(val_loader)
 
                 # Update history
                 self.history["train_loss"].append(train_metrics["loss"])
@@ -392,10 +469,12 @@ class Trainer:
         """
         checkpoint = {
             "epoch": self.epoch,
-            "model_state_dict": self.model.state_dict(),
+            "model_state_dict": self.raw_model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "history": self.history,
         }
+        if self.ema is not None:
+            checkpoint["ema_state_dict"] = self.ema.state_dict()
         checkpoint.update(kwargs)
 
         filepath = Path(filepath)
@@ -423,10 +502,13 @@ class Trainer:
 
         checkpoint = torch.load(filepath, map_location=self.device)
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.raw_model.load_state_dict(checkpoint["model_state_dict"])
 
         if load_optimizer and "optimizer_state_dict" in checkpoint:
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        if self.ema is not None and "ema_state_dict" in checkpoint:
+            self.ema.load_state_dict(checkpoint["ema_state_dict"])
 
         if "epoch" in checkpoint:
             self.epoch = checkpoint["epoch"]

@@ -126,7 +126,9 @@ class CombinedLoss(BaseLoss):
         Raises:
             ValueError: If loss name is not recognized
         """
+        from clearview.losses.adversarial import AdversarialLoss
         from clearview.losses.edge import LaplacianEdgeLoss, SobelEdgeLoss
+        from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss
         from clearview.losses.perceptual import VGGPerceptualLoss
         from clearview.losses.pixel import CharbonnierLoss, L1Loss, L2Loss
         from clearview.losses.structural import MultiScaleSSIMLoss, SSIMLoss
@@ -145,6 +147,12 @@ class CombinedLoss(BaseLoss):
             "laplacian": LaplacianEdgeLoss,
             "perceptual": VGGPerceptualLoss,
             "vgg": VGGPerceptualLoss,
+            "fft": FFTLoss,
+            "frequency": FFTLoss,
+            "focal_frequency": FocalFrequencyLoss,
+            "ffl": FocalFrequencyLoss,
+            "adversarial": AdversarialLoss,
+            "gan": AdversarialLoss,
         }
 
         losses: Dict[str, nn.Module] = {}

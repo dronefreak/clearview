@@ -8,7 +8,9 @@ from typing import Any, Callable, Dict, List, Type
 
 from clearview.models.attention_unet import AttentionUNet
 from clearview.models.base import BaseModel
+from clearview.models.nafnet import NAFNet, NAFNetLarge, NAFNetSmall
 from clearview.models.resnet_unet import ResNetUNet, create_resnet_unet
+from clearview.models.restormer import Restormer, RestormerLarge, RestormerSmall
 from clearview.models.unet import UNet
 
 # Model registry for factory pattern
@@ -22,6 +24,12 @@ _MODEL_REGISTRY: Dict[str, Callable[..., BaseModel]] = {
     "resnet50_unet": lambda **kwargs: ResNetUNet(backbone="resnet50", **kwargs),
     "resnet101_unet": lambda **kwargs: ResNetUNet(backbone="resnet101", **kwargs),
     "resnet152_unet": lambda **kwargs: ResNetUNet(backbone="resnet152", **kwargs),
+    "nafnet": lambda **kwargs: NAFNet(**kwargs),
+    "nafnet_small": lambda **kwargs: NAFNetSmall(**kwargs),
+    "nafnet_large": lambda **kwargs: NAFNetLarge(**kwargs),
+    "restormer": lambda **kwargs: Restormer(**kwargs),
+    "restormer_small": lambda **kwargs: RestormerSmall(**kwargs),
+    "restormer_large": lambda **kwargs: RestormerLarge(**kwargs),
 }
 
 
@@ -92,6 +100,12 @@ __all__ = [
     "UNet",
     "AttentionUNet",
     "ResNetUNet",
+    "NAFNet",
+    "NAFNetSmall",
+    "NAFNetLarge",
+    "Restormer",
+    "RestormerSmall",
+    "RestormerLarge",
     # Factory functions
     "register_model",
     "get_model",

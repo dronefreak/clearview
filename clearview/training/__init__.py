@@ -12,6 +12,8 @@ from clearview.training.callbacks import (
     ModelCheckpoint,
     ProgressCallback,
 )
+from clearview.training.ema import ExponentialMovingAverage
+from clearview.training.schedulers import WarmupCosineScheduler
 from clearview.training.trainer import Trainer
 
 __all__ = [
@@ -24,4 +26,8 @@ __all__ = [
     "EarlyStopping",
     "LearningRateScheduler",
     "ProgressCallback",
+    # EMA
+    "ExponentialMovingAverage",
+    # Schedulers
+    "WarmupCosineScheduler",
 ]
