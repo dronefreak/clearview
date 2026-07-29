@@ -10,6 +10,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+SUPPORTED_ACTIVATIONS = frozenset({"relu", "leaky_relu", "gelu", "none"})
+
 
 class ConvBlock(nn.Module):
     """Basic convolutional block with normalization and activation.
@@ -43,6 +45,12 @@ class ConvBlock(nn.Module):
     ) -> None:
         """Initialize convolution block."""
         super().__init__()
+
+        if activation not in SUPPORTED_ACTIVATIONS:
+            raise ValueError(
+                f"Unknown activation '{activation}'. "
+                f"Supported: {sorted(SUPPORTED_ACTIVATIONS)}"
+            )
 
         layers: List[nn.Module] = []
 

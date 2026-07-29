@@ -5,7 +5,10 @@ training and evaluating image deraining models.
 """
 
 from clearview.data.datasets import (
+    DDNDataDataset,
+    DIDDataDataset,
     ImagePairDataset,
+    Rain13KDataset,
     Rain100Dataset,
     Rain1400Dataset,
     SingleFolderDataset,
@@ -30,6 +33,9 @@ __all__ = [
     "SingleFolderDataset",
     "Rain100Dataset",
     "Rain1400Dataset",
+    "Rain13KDataset",
+    "DDNDataDataset",
+    "DIDDataDataset",
     "SyntheticRainDataset",
     # Transforms
     "PairedTransform",

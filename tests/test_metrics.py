@@ -11,6 +11,8 @@ import torch
 
 from clearview.utils.metrics import (
     MetricsTracker,
+    compute_brisque,
+    compute_lpips,
     compute_mae,
     compute_metrics,
     compute_mse,
@@ -285,6 +287,95 @@ class TestComputeMetrics:
 
         mock_psnr.assert_called_once()
         assert mock_psnr.call_args[1]["max_val"] == 255.0
+
+
+class TestComputeLPIPS:
+    """Tests for LPIPS computation (requires the optional `lpips` package)."""
+
+    def test_lpips_identical_images_near_zero(self):
+        """Test LPIPS is near zero for identical images."""
+        pytest.importorskip("lpips")
+        pred = torch.rand(2, 3, 64, 64)
+        target = pred.clone()
+
+        lpips_dist = compute_lpips(pred, target)
+
+        assert isinstance(lpips_dist, float)
+        assert lpips_dist == pytest.approx(0.0, abs=1e-4)
+
+    def test_lpips_different_images_positive(self):
+        """Test LPIPS is positive for different images."""
+        pytest.importorskip("lpips")
+        pred = torch.rand(2, 3, 64, 64)
+        target = torch.rand(2, 3, 64, 64)
+
+        lpips_dist = compute_lpips(pred, target)
+
+        assert lpips_dist > 0
+        assert isinstance(lpips_dist, float)
+
+    def test_lpips_reduction_none(self):
+        """Test LPIPS with no reduction returns per-image values."""
+        pytest.importorskip("lpips")
+        batch_size = 2
+        pred = torch.rand(batch_size, 3, 64, 64)
+        target = torch.rand(batch_size, 3, 64, 64)
+
+        lpips_dist = compute_lpips(pred, target, reduction="none")
+
+        assert isinstance(lpips_dist, torch.Tensor)
+        assert lpips_dist.shape == (batch_size,)
+
+    def test_lpips_grayscale_input(self):
+        """Test LPIPS supports single-channel (grayscale) images."""
+        pytest.importorskip("lpips")
+        pred = torch.rand(1, 1, 64, 64)
+        target = torch.rand(1, 1, 64, 64)
+
+        lpips_dist = compute_lpips(pred, target)
+
+        assert isinstance(lpips_dist, float)
+
+    def test_lpips_type_mismatch_error(self):
+        """Test that non-tensor inputs raise TypeError."""
+        pytest.importorskip("lpips")
+        pred = torch.rand(1, 3, 32, 32)
+        target = np.random.rand(1, 3, 32, 32)
+
+        with pytest.raises(TypeError):
+            compute_lpips(pred, target)
+
+
+class TestComputeBRISQUE:
+    """Tests for BRISQUE computation (requires the optional `piq` package)."""
+
+    def test_brisque_returns_float(self):
+        """Test that BRISQUE returns a scalar float by default."""
+        pytest.importorskip("piq")
+        image = torch.rand(2, 3, 96, 96)
+
+        score = compute_brisque(image)
+
+        assert isinstance(score, float)
+
+    def test_brisque_reduction_none(self):
+        """Test BRISQUE with no reduction returns per-image scores."""
+        pytest.importorskip("piq")
+        batch_size = 2
+        image = torch.rand(batch_size, 3, 96, 96)
+
+        scores = compute_brisque(image, reduction="none")
+
+        assert isinstance(scores, torch.Tensor)
+        assert scores.shape == (batch_size,)
+
+    def test_brisque_type_mismatch_error(self):
+        """Test that non-tensor input raises TypeError."""
+        pytest.importorskip("piq")
+        image = np.random.rand(1, 3, 96, 96)
+
+        with pytest.raises(TypeError):
+            compute_brisque(image)
 
 
 class TestMetricsTracker:

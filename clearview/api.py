@@ -182,7 +182,7 @@ class DerainingModel:
             >>> images = torch.randn(4, 3, 256, 256).clamp(0, 1)
             >>> clean_images = model.process_batch(images)
         """
-        images = images.to(self.device)
+        images = images.to(device=self.device, dtype=torch.float32)
 
         # Pad if needed
         padded, pad_vals = pad_to_multiple(images, multiple=32)

@@ -1,15 +1,20 @@
 """Evaluation metrics for image restoration.
 
 Provides standard metrics like PSNR, SSIM, MAE, and MSE for evaluating
-image deraining and restoration quality.
+image deraining and restoration quality, plus optional learned/no-reference
+metrics (LPIPS, BRISQUE) that depend on third-party packages.
 """
 
 from collections import defaultdict
-from typing import Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+# Lazily-populated cache of instantiated LPIPS networks, keyed by
+# "{net}_{device}" so repeated calls don't reload the pretrained backbone.
+_LPIPS_CACHE: Dict[str, Any] = {}
 
 
 def compute_psnr(
@@ -52,8 +57,8 @@ def compute_psnr(
             return psnr.mean().item()
         return psnr
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         # NumPy implementation
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mse_np = np.mean((pred - target) ** 2, axis=axis_tuple)
@@ -186,8 +191,8 @@ def compute_mae(
             return mae.mean().item()
         return mae
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mae_np: np.ndarray = np.mean(np.abs(pred - target), axis=axis_tuple)
 
@@ -226,14 +231,151 @@ def compute_mse(
             return mse.mean().item()
         return mse
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         axis_tuple = (1, 2, 3) if pred.ndim == 4 else (0, 1, 2)
         mse_np: np.ndarray = np.mean((pred - target) ** 2, axis=axis_tuple)
 
         if reduction == "mean":
             return float(np.mean(mse_np))
         return mse_np
+
+
+def compute_lpips(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    net: str = "alex",
+    max_val: float = 1.0,
+    reduction: str = "mean",
+) -> Union[float, torch.Tensor]:
+    """Compute Learned Perceptual Image Patch Similarity (LPIPS).
+
+    LPIPS compares deep features from a pretrained network (weighted by
+    linear layers calibrated against human perceptual judgments) and
+    correlates substantially better with human perception than PSNR/SSIM.
+
+    Requires the optional ``lpips`` package: ``pip install lpips``.
+
+    Args:
+        pred: Predicted image (B, C, H, W), C in {1, 3}
+        target: Target image (same shape as pred)
+        net: Backbone network. One of 'alex' | 'vgg' | 'squeeze'.
+            'alex' is fastest and recommended by the LPIPS authors as the
+            default for reference-based evaluation.
+        max_val: Maximum possible pixel value (1.0 for normalized images)
+        reduction: 'mean' | 'none'. If 'none', returns per-image LPIPS
+
+    Returns:
+        LPIPS distance(s) — lower is more perceptually similar
+
+    Raises:
+        ImportError: If the ``lpips`` package is not installed
+        TypeError: If pred/target are not torch.Tensor
+
+    Reference:
+        Zhang et al. "The Unreasonable Effectiveness of Deep Features as a
+        Perceptual Metric." CVPR 2018.
+
+    Example:
+        >>> pred = torch.rand(4, 3, 256, 256)
+        >>> target = torch.rand(4, 3, 256, 256)
+        >>> lpips_dist = compute_lpips(pred, target)
+    """
+    try:
+        import lpips
+    except ImportError as e:
+        raise ImportError(
+            "The 'lpips' package is required for compute_lpips(). "
+            "Install it with `pip install lpips`."
+        ) from e
+
+    if not isinstance(pred, torch.Tensor) or not isinstance(target, torch.Tensor):
+        raise TypeError("compute_lpips() only supports torch.Tensor inputs")
+
+    device = pred.device
+    cache_key = f"{net}_{device}"
+
+    if cache_key not in _LPIPS_CACHE:
+        model = lpips.LPIPS(net=net, verbose=False).to(device)
+        model.eval()
+        for param in model.parameters():
+            param.requires_grad_(False)
+        _LPIPS_CACHE[cache_key] = model
+
+    model = _LPIPS_CACHE[cache_key]
+
+    pred_scaled = pred / max_val if max_val != 1.0 else pred
+    target_scaled = target / max_val if max_val != 1.0 else target
+
+    # LPIPS expects 3-channel input
+    if pred_scaled.size(1) == 1:
+        pred_scaled = pred_scaled.repeat(1, 3, 1, 1)
+        target_scaled = target_scaled.repeat(1, 3, 1, 1)
+
+    with torch.no_grad():
+        # normalize=True tells lpips the inputs are in [0, 1] (it internally
+        # rescales to the [-1, 1] range the network was calibrated on).
+        distance = model(pred_scaled, target_scaled, normalize=True)
+
+    distance = distance.view(-1)
+
+    if reduction == "mean":
+        return distance.mean().item()
+    return distance
+
+
+def compute_brisque(
+    image: torch.Tensor,
+    max_val: float = 1.0,
+    reduction: str = "mean",
+) -> Union[float, torch.Tensor]:
+    """Compute BRISQUE (Blind/Referenceless Image Spatial Quality Evaluator).
+
+    A no-reference (blind) quality metric based on natural scene statistics
+    of MSCN (mean subtracted contrast normalized) coefficients, scored with
+    a pretrained SVR model. Useful for evaluating restoration quality on
+    real-world images without ground truth (e.g. SPA-Data-style benchmarks).
+    Lower scores indicate better perceptual quality.
+
+    Requires the optional ``piq`` package: ``pip install piq``.
+
+    Args:
+        image: Image to score (B, C, H, W), C in {1, 3}
+        max_val: Maximum possible pixel value (1.0 for normalized images)
+        reduction: 'mean' | 'none'. If 'none', returns per-image scores
+
+    Returns:
+        BRISQUE score(s) — lower is better quality
+
+    Raises:
+        ImportError: If the ``piq`` package is not installed
+
+    Reference:
+        Mittal et al. "No-Reference Image Quality Assessment in the
+        Spatial Domain." IEEE TIP 2012.
+
+    Example:
+        >>> image = torch.rand(4, 3, 256, 256)
+        >>> brisque_score = compute_brisque(image)
+    """
+    try:
+        import piq
+    except ImportError as e:
+        raise ImportError(
+            "The 'piq' package is required for compute_brisque(). "
+            "Install it with `pip install piq`."
+        ) from e
+
+    if not isinstance(image, torch.Tensor):
+        raise TypeError("compute_brisque() only supports torch.Tensor inputs")
+
+    image_clamped = (image / max_val if max_val != 1.0 else image).clamp(0.0, 1.0)
+
+    score = piq.brisque(image_clamped, data_range=1.0, reduction=reduction)
+
+    if reduction == "mean":
+        return score.item()
+    return score
 
 
 def compute_metrics(
@@ -247,8 +389,12 @@ def compute_metrics(
     Args:
         pred: Predicted image
         target: Target image
-        metrics: List of metrics to compute. If None, computes all.
-            Options: 'psnr', 'ssim', 'mae', 'mse'
+        metrics: List of metrics to compute. If None, computes the default
+            reference-based metrics ('psnr', 'ssim', 'mae', 'mse').
+            Additional opt-in metrics (not included by default since they
+            require extra packages / are more expensive to compute):
+            'lpips' (requires ``lpips``), 'brisque' (requires ``piq``,
+            no-reference — only uses ``pred``, ignores ``target``).
         max_val: Maximum pixel value
 
     Returns:
@@ -277,6 +423,10 @@ def compute_metrics(
             results["mae"] = compute_mae(pred, target)
         elif metric_lower == "mse":
             results["mse"] = compute_mse(pred, target)
+        elif metric_lower == "lpips":
+            results["lpips"] = compute_lpips(pred, target, max_val=max_val)
+        elif metric_lower == "brisque":
+            results["brisque"] = compute_brisque(pred, max_val=max_val)
         else:
             raise ValueError(f"Unknown metric: {metric}")
 
@@ -366,6 +516,8 @@ __all__ = [
     "compute_ssim",
     "compute_mae",
     "compute_mse",
+    "compute_lpips",
+    "compute_brisque",
     "compute_metrics",
     "MetricsTracker",
 ]

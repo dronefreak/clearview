@@ -23,12 +23,15 @@ from clearview.utils.logger import (
 )
 from clearview.utils.metrics import (
     MetricsTracker,
+    compute_brisque,
+    compute_lpips,
     compute_mae,
     compute_metrics,
     compute_mse,
     compute_psnr,
     compute_ssim,
 )
+from clearview.utils.niqe import NIQEModel, compute_niqe, fit_niqe_model
 from clearview.utils.visualization import (
     create_comparison_grid,
     plot_metric_histogram,
@@ -43,8 +46,14 @@ __all__ = [
     "compute_ssim",
     "compute_mae",
     "compute_mse",
+    "compute_lpips",
+    "compute_brisque",
     "compute_metrics",
     "MetricsTracker",
+    # No-reference NIQE
+    "NIQEModel",
+    "fit_niqe_model",
+    "compute_niqe",
     # Checkpointing
     "save_checkpoint",
     "load_checkpoint",
