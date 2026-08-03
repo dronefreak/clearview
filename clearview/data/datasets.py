@@ -986,7 +986,7 @@ class SPADataDataset(Dataset):
         def _sort_key(image_id: str) -> Tuple[int, Union[int, str]]:
             # Sort numerically when possible so ids like '2' come before '10'.
             return (
-                (0, cast(Union[int, str], image_id))
+                (0, cast(Union[int, str], int(image_id)))
                 if image_id.isdigit()
                 else (1, image_id)
             )
