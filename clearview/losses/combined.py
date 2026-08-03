@@ -128,9 +128,18 @@ class CombinedLoss(BaseLoss):
         """
         from clearview.losses.adversarial import AdversarialLoss
         from clearview.losses.edge import LaplacianEdgeLoss, SobelEdgeLoss
-        from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss
-        from clearview.losses.perceptual import VGGPerceptualLoss
-        from clearview.losses.pixel import CharbonnierLoss, L1Loss, L2Loss
+        from clearview.losses.frequency import (
+            FFTLoss,
+            FocalFrequencyLoss,
+            WaveletLoss,
+        )
+        from clearview.losses.perceptual import DISTSLoss, VGGPerceptualLoss
+        from clearview.losses.pixel import (
+            CharbonnierLoss,
+            ColorConsistencyLoss,
+            L1Loss,
+            L2Loss,
+        )
         from clearview.losses.structural import MultiScaleSSIMLoss, SSIMLoss
 
         loss_registry: Dict[str, Type[Any]] = {
@@ -147,10 +156,14 @@ class CombinedLoss(BaseLoss):
             "laplacian": LaplacianEdgeLoss,
             "perceptual": VGGPerceptualLoss,
             "vgg": VGGPerceptualLoss,
+            "dists": DISTSLoss,
             "fft": FFTLoss,
             "frequency": FFTLoss,
             "focal_frequency": FocalFrequencyLoss,
             "ffl": FocalFrequencyLoss,
+            "wavelet": WaveletLoss,
+            "color": ColorConsistencyLoss,
+            "color_consistency": ColorConsistencyLoss,
             "adversarial": AdversarialLoss,
             "gan": AdversarialLoss,
         }

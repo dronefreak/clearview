@@ -287,3 +287,153 @@ class TestTrainerCompile:
             model=new_model, optimizer=new_optimizer, loss_fn=loss_fn, device="cpu"
         )
         new_trainer.load_checkpoint(ckpt_path)
+
+
+class TestTrainerChannelsLast:
+    """Tests for the channels_last memory format Trainer option."""
+
+    def test_channels_last_disabled_by_default(self) -> None:
+        """Test that channels_last=False (default) keeps contiguous format."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model, optimizer=optimizer, loss_fn=loss_fn, device="cpu"
+        )
+
+        assert trainer.channels_last is False
+        first_conv = next(trainer.model.parameters())
+        assert first_conv.is_contiguous(memory_format=torch.contiguous_format)
+
+    def test_channels_last_converts_model_weights(self) -> None:
+        """Test that channels_last=True moves model params to NHWC layout."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            channels_last=True,
+        )
+
+        assert trainer.channels_last is True
+        conv_weight = trainer.model[0].weight
+        assert conv_weight.is_contiguous(memory_format=torch.channels_last)
+
+    def test_channels_last_trains_without_error(self) -> None:
+        """Test that a channels_last trainer completes a training epoch."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            channels_last=True,
+        )
+
+        history = trainer.train_epoch(_tiny_loader())
+        val_history = trainer.validate_epoch(_tiny_loader())
+
+        assert "loss" in history
+        assert "loss" in val_history
+
+    def test_to_device_helper_converts_4d_tensor(self) -> None:
+        """Test the internal _to_device() helper applies channels_last to 4D tensors."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            channels_last=True,
+        )
+
+        image = torch.rand(2, 3, 16, 16)
+        converted = trainer._to_device(image)
+        assert converted.is_contiguous(memory_format=torch.channels_last)
+
+        # Non-4D tensors are unaffected (no memory-format concept for them).
+        vector = torch.rand(8)
+        converted_vector = trainer._to_device(vector)
+        assert converted_vector.shape == vector.shape
+
+
+class TestTrainerAMPDtype:
+    """Tests for the configurable AMP dtype Trainer option."""
+
+    def test_default_amp_dtype_is_float16(self) -> None:
+        """Test that amp_dtype defaults to torch.float16."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model, optimizer=optimizer, loss_fn=loss_fn, device="cpu"
+        )
+
+        assert trainer.amp_dtype == torch.float16
+
+    def test_bfloat16_disables_grad_scaler(self) -> None:
+        """Test that requesting bfloat16 AMP disables loss scaling."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            mixed_precision=True,
+            amp_dtype=torch.bfloat16,
+        )
+
+        assert trainer.amp_dtype == torch.bfloat16
+        assert trainer.scaler.is_enabled() is False
+
+    def test_float16_mixed_precision_enables_grad_scaler(self) -> None:
+        """Test that float16 AMP keeps loss scaling enabled."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            mixed_precision=True,
+            amp_dtype=torch.float16,
+        )
+
+        assert trainer.scaler.is_enabled() is True
+
+    def test_bfloat16_trains_without_error_on_cpu(self) -> None:
+        """Test that a bfloat16 mixed-precision trainer completes an epoch on CPU."""
+        model = _tiny_model()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        loss_fn = nn.L1Loss()
+
+        trainer = Trainer(
+            model=model,
+            optimizer=optimizer,
+            loss_fn=loss_fn,
+            device="cpu",
+            mixed_precision=True,
+            amp_dtype=torch.bfloat16,
+        )
+
+        history = trainer.train_epoch(_tiny_loader())
+
+        assert "loss" in history
+        assert not torch.isnan(torch.tensor(history["loss"]))

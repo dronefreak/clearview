@@ -8,9 +8,15 @@ from clearview.losses.adversarial import AdversarialLoss, GANLoss, PatchDiscrimi
 from clearview.losses.base import BaseLoss
 from clearview.losses.combined import CombinedLoss
 from clearview.losses.edge import EdgeLoss, SobelEdgeLoss
-from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss
-from clearview.losses.perceptual import PerceptualLoss, VGGPerceptualLoss
-from clearview.losses.pixel import L1Loss, L2Loss, MAELoss, MSELoss
+from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss, WaveletLoss
+from clearview.losses.perceptual import DISTSLoss, PerceptualLoss, VGGPerceptualLoss
+from clearview.losses.pixel import (
+    ColorConsistencyLoss,
+    L1Loss,
+    L2Loss,
+    MAELoss,
+    MSELoss,
+)
 from clearview.losses.structural import MultiScaleSSIMLoss, SSIMLoss
 
 __all__ = [
@@ -21,6 +27,7 @@ __all__ = [
     "L2Loss",
     "MSELoss",
     "MAELoss",
+    "ColorConsistencyLoss",
     # Structural losses
     "SSIMLoss",
     "MultiScaleSSIMLoss",
@@ -30,9 +37,11 @@ __all__ = [
     # Frequency losses
     "FFTLoss",
     "FocalFrequencyLoss",
+    "WaveletLoss",
     # Perceptual losses
     "PerceptualLoss",
     "VGGPerceptualLoss",
+    "DISTSLoss",
     # Adversarial losses
     "PatchDiscriminator",
     "GANLoss",

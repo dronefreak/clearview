@@ -6,7 +6,7 @@ various formats (image pairs, directories, etc.).
 
 import logging
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import torch
@@ -836,6 +836,197 @@ class DIDDataDataset(Dataset):
         return self.density_labels[idx]
 
 
+class SPADataDataset(Dataset):
+    """Dataset for SPA-Data, a real-world rain/clean image dataset.
+
+    From Wang et al., "Spatial Attentive Single-Image Deraining with a High
+    Quality Real Rain Dataset" (SPANet), CVPR 2019.
+
+    Unlike most other deraining datasets, SPA-Data's rainy and clean images
+    do **not** share identical filenames — they share a common numeric ID but
+    different prefixes (``rain-{id}.png`` / ``norain-{id}.png``), so the
+    exact-filename matching used by :class:`ImagePairDataset` does not apply
+    directly. This class matches pairs by stripping the known prefixes
+    before comparing IDs.
+
+    Commonly distributed with a ``train``/``val`` split, each containing a
+    ``rain``/``norain`` directory pair (optionally nested under an
+    ``rgb_reconstruction`` folder, as in some repackaged mirrors)::
+
+        SPA-Data/
+        ├── train/
+        │   └── rgb_reconstruction/
+        │       ├── rain/
+        │       │   ├── rain-0.png
+        │       │   └── ...
+        │       └── norain/
+        │           ├── norain-0.png
+        │           └── ...
+        └── val/
+            └── rgb_reconstruction/
+                ├── rain/
+                └── norain/
+
+    Args:
+        root_dir: Root directory containing the dataset (or split subdir)
+        split: Optional split name ('train' | 'val' | 'test') to look for
+            under ``root_dir``. If ``None``, ``root_dir`` is treated as
+            already pointing at the split directory.
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> train_dataset = SPADataDataset('data/SPA-Data', split='train')
+        >>> val_dataset = SPADataDataset('data/SPA-Data', split='val')
+        >>> rainy, clean = train_dataset[0]
+    """
+
+    #: Subdirectory candidates tried (in order), relative to the split dir,
+    #: for locating the rain/norain image directories.
+    RAINY_DIR_CANDIDATES: Tuple[str, ...] = (
+        "rgb_reconstruction/rain",
+        "rain",
+        "rainy",
+    )
+    CLEAN_DIR_CANDIDATES: Tuple[str, ...] = (
+        "rgb_reconstruction/norain",
+        "norain",
+        "clean",
+    )
+
+    #: Filename prefixes stripped before matching rainy/clean image IDs.
+    RAINY_PREFIX = "rain-"
+    CLEAN_PREFIX = "norain-"
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        split: Optional[str] = None,
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize SPA-Data dataset.
+
+        Args:
+            root_dir: Root directory containing the dataset (or split subdir)
+            split: Optional split subdirectory name under ``root_dir``
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If rain/norain directories cannot be located
+            ValueError: If rainy and clean directories contain mismatched IDs
+        """
+        root_dir = Path(root_dir)
+        base_dir = root_dir / split if split is not None else root_dir
+
+        rainy_dir = Rain13KDataset._find_dir(base_dir, self.RAINY_DIR_CANDIDATES)
+        clean_dir = Rain13KDataset._find_dir(base_dir, self.CLEAN_DIR_CANDIDATES)
+
+        if rainy_dir is None or clean_dir is None:
+            raise FileNotFoundError(
+                f"Could not find rain/norain directories in {base_dir}. "
+                f"Expected one of: rain={self.RAINY_DIR_CANDIDATES}, "
+                f"norain={self.CLEAN_DIR_CANDIDATES}"
+            )
+
+        self.rainy_dir = rainy_dir
+        self.clean_dir = clean_dir
+        self.transform = transform
+        self.extensions = extensions
+
+        try:
+            rainy_entries = list(self.rainy_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Rainy directory not found: {self.rainy_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read rainy directory '{self.rainy_dir}': {e}"
+            ) from e
+
+        try:
+            clean_entries = list(self.clean_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Clean directory not found: {self.clean_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read clean directory '{self.clean_dir}': {e}"
+            ) from e
+
+        rainy_files = sorted(f for f in rainy_entries if f.suffix.lower() in extensions)
+        clean_files = sorted(f for f in clean_entries if f.suffix.lower() in extensions)
+
+        def _strip_prefix(stem: str, prefix: str) -> str:
+            return stem[len(prefix) :] if stem.startswith(prefix) else stem
+
+        rainy_by_id = {_strip_prefix(f.stem, self.RAINY_PREFIX): f for f in rainy_files}
+        clean_by_id = {_strip_prefix(f.stem, self.CLEAN_PREFIX): f for f in clean_files}
+
+        rainy_ids = set(rainy_by_id)
+        clean_ids = set(clean_by_id)
+        only_in_rainy = rainy_ids - clean_ids
+        only_in_clean = clean_ids - rainy_ids
+
+        if only_in_rainy or only_in_clean:
+            details = []
+            if only_in_rainy:
+                details.append(f"only in rain: {sorted(only_in_rainy)[:5]}")
+            if only_in_clean:
+                details.append(f"only in norain: {sorted(only_in_clean)[:5]}")
+            raise ValueError(
+                f"Unpaired images found ({'; '.join(details)}). rain/norain "
+                "directories must contain matching IDs after stripping "
+                f"'{self.RAINY_PREFIX}'/'{self.CLEAN_PREFIX}' prefixes."
+            )
+
+        def _sort_key(image_id: str) -> Tuple[int, Union[int, str]]:
+            # Sort numerically when possible so ids like '2' come before '10'.
+            return (
+                (0, cast(Union[int, str], image_id))
+                if image_id.isdigit()
+                else (1, image_id)
+            )
+
+        common_ids = sorted(rainy_ids, key=_sort_key)
+        self.rainy_files = [rainy_by_id[i] for i in common_ids]
+        self.clean_files = [clean_by_id[i] for i in common_ids]
+
+        logger.info(f"Loaded {len(self.rainy_files)} image pairs from SPA-Data")
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a rainy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (rainy_tensor, clean_tensor)
+        """
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
+
 __all__ = [
     "ImagePairDataset",
     "SingleFolderDataset",
@@ -845,4 +1036,5 @@ __all__ = [
     "Rain13KDataset",
     "DDNDataDataset",
     "DIDDataDataset",
+    "SPADataDataset",
 ]

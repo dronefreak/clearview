@@ -11,6 +11,7 @@ from clearview.data.datasets import (
     DIDDataDataset,
     ImagePairDataset,
     Rain13KDataset,
+    SPADataDataset,
 )
 
 
@@ -231,3 +232,109 @@ class TestDIDDataDataset:
 
         with pytest.raises(ValueError):
             DIDDataDataset(root_dir=root_dir)
+
+
+class TestSPADataDataset:
+    """Tests for SPADataDataset."""
+
+    def test_flat_rain_norain_layout(self, temp_dir: Path) -> None:
+        """Test SPADataDataset with a flat rain/norain directory layout."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        rainy_dir = root_dir / "rain"
+        clean_dir = root_dir / "norain"
+        rainy_dir.mkdir(parents=True)
+        clean_dir.mkdir(parents=True)
+
+        for i in range(4):
+            _save_random_image(rainy_dir / f"rain-{i}.png")
+            _save_random_image(clean_dir / f"norain-{i}.png")
+
+        dataset = SPADataDataset(root_dir=root_dir)
+        assert len(dataset) == 4
+
+    def test_rgb_reconstruction_layout(self, temp_dir: Path) -> None:
+        """Test SPADataDataset with the nested rgb_reconstruction layout."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        rainy_dir = root_dir / "rgb_reconstruction" / "rain"
+        clean_dir = root_dir / "rgb_reconstruction" / "norain"
+        rainy_dir.mkdir(parents=True)
+        clean_dir.mkdir(parents=True)
+
+        for i in range(3):
+            _save_random_image(rainy_dir / f"rain-{i}.png")
+            _save_random_image(clean_dir / f"norain-{i}.png")
+
+        dataset = SPADataDataset(root_dir=root_dir)
+        assert len(dataset) == 3
+
+    def test_split_argument(self, temp_dir: Path) -> None:
+        """Test SPADataDataset with an explicit split subdirectory."""
+        root_dir = temp_dir / "SPA-Data"
+        for split in ("train", "val"):
+            rainy_dir = root_dir / split / "rain"
+            clean_dir = root_dir / split / "norain"
+            rainy_dir.mkdir(parents=True)
+            clean_dir.mkdir(parents=True)
+            _save_random_image(rainy_dir / "rain-0.png")
+            _save_random_image(clean_dir / "norain-0.png")
+
+        train_dataset = SPADataDataset(root_dir=root_dir, split="train")
+        val_dataset = SPADataDataset(root_dir=root_dir, split="val")
+        assert len(train_dataset) == 1
+        assert len(val_dataset) == 1
+
+    def test_getitem_shapes(self, temp_dir: Path) -> None:
+        """Test SPADataDataset __getitem__ returns valid image tensors."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        rainy_dir = root_dir / "rain"
+        clean_dir = root_dir / "norain"
+        rainy_dir.mkdir(parents=True)
+        clean_dir.mkdir(parents=True)
+        _save_random_image(rainy_dir / "rain-0.png")
+        _save_random_image(clean_dir / "norain-0.png")
+
+        dataset = SPADataDataset(root_dir=root_dir)
+        rainy, clean = dataset[0]
+
+        assert isinstance(rainy, torch.Tensor)
+        assert isinstance(clean, torch.Tensor)
+        assert rainy.shape[0] == 3
+        assert clean.shape[0] == 3
+
+    def test_numeric_id_ordering(self, temp_dir: Path) -> None:
+        """Test that numeric IDs are ordered numerically, not lexically."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        rainy_dir = root_dir / "rain"
+        clean_dir = root_dir / "norain"
+        rainy_dir.mkdir(parents=True)
+        clean_dir.mkdir(parents=True)
+
+        for i in [2, 10, 1]:
+            _save_random_image(rainy_dir / f"rain-{i}.png")
+            _save_random_image(clean_dir / f"norain-{i}.png")
+
+        dataset = SPADataDataset(root_dir=root_dir)
+        ids = [f.stem[len("rain-") :] for f in dataset.rainy_files]
+        assert ids == ["1", "2", "10"]
+
+    def test_missing_layout_raises(self, temp_dir: Path) -> None:
+        """Test that an unsupported directory layout raises FileNotFoundError."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        root_dir.mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError):
+            SPADataDataset(root_dir=root_dir)
+
+    def test_unpaired_images_raises(self, temp_dir: Path) -> None:
+        """Test that mismatched rain/norain IDs raise ValueError."""
+        root_dir = temp_dir / "SPA-Data" / "train"
+        rainy_dir = root_dir / "rain"
+        clean_dir = root_dir / "norain"
+        rainy_dir.mkdir(parents=True)
+        clean_dir.mkdir(parents=True)
+
+        _save_random_image(rainy_dir / "rain-0.png")
+        _save_random_image(clean_dir / "norain-1.png")
+
+        with pytest.raises(ValueError):
+            SPADataDataset(root_dir=root_dir)

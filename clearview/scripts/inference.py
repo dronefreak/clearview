@@ -2,15 +2,19 @@
 """Inference script for image deraining."""
 
 import argparse
+import json
 import logging
 import time
 from pathlib import Path
-from typing import List
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from tqdm import tqdm
 
 from clearview.api import DerainingModel
+from clearview.models import list_models
+from clearview.utils import compute_brisque
+from clearview.utils.image import numpy_to_tensor
 
 logger = logging.getLogger(__name__)
 
@@ -27,16 +31,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="unet",
-        choices=[
-            "unet",
-            "attention_unet",
-            "resnet_unet",
-            "resnet18_unet",
-            "resnet34_unet",
-            "resnet50_unet",
-            "resnet101_unet",
-            "resnet152_unet",
-        ],
+        choices=list_models(),
         help="Model architecture",
     )
     parser.add_argument(
@@ -84,6 +79,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--benchmark", action="store_true", help="Benchmark inference speed"
     )
+    parser.add_argument(
+        "--report-quality-metrics",
+        action="store_true",
+        help="Compute and log no-reference image quality metrics (BRISQUE) "
+        "on each derained output, since inference has no ground-truth "
+        "clean image to compare against. Requires the optional 'piq' "
+        "package. In directory mode, per-image and aggregate scores are "
+        "also saved to '<output-dir>/quality_metrics.json'.",
+    )
 
     return parser.parse_args()
 
@@ -106,13 +110,46 @@ def get_image_files(
     return sorted(image_files)
 
 
+def compute_output_quality_metrics(image_path: Path) -> Dict[str, float]:
+    """Compute no-reference quality metrics for a derained output image.
+
+    Only metrics that don't require a ground-truth clean image or a fitted
+    reference model are used here (e.g. BRISQUE), since inference has no
+    access to either.
+
+    Args:
+        image_path: Path to the derained output image
+
+    Returns:
+        Dictionary mapping metric name to value. Empty if the required
+        optional dependency ('piq') is not installed.
+    """
+    import numpy as np
+    from PIL import Image
+
+    try:
+        import piq  # noqa: F401
+    except ImportError:
+        logger.warning(
+            "Skipping quality metrics: requires the optional 'piq' package "
+            "(pip install piq)"
+        )
+        return {}
+
+    img = np.array(Image.open(image_path).convert("RGB")).astype(np.float32) / 255.0
+    img_tensor = numpy_to_tensor(img).unsqueeze(0)
+
+    return {"brisque": compute_brisque(img_tensor)}
+
+
 def process_single_image(
     model: DerainingModel,
     input_path: Path,
     output_path: Path,
     save_comparison: bool = False,
     benchmark: bool = False,
-) -> float:
+    report_quality_metrics: bool = False,
+) -> Tuple[float, Optional[Dict[str, float]]]:
     """Process a single image."""
     # Ensure output directory exists
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -136,7 +173,6 @@ def process_single_image(
             output_path.parent / f"{output_path.stem}_comparison{output_path.suffix}"
         )
 
-        from clearview.utils.image import numpy_to_tensor
         from clearview.utils.visualization import (
             save_comparison as save_comparison_util,
         )
@@ -153,7 +189,11 @@ def process_single_image(
 
     inference_time = time.time() - start_time
 
-    return inference_time
+    quality_metrics: Optional[Dict[str, float]] = None
+    if report_quality_metrics:
+        quality_metrics = compute_output_quality_metrics(output_path)
+
+    return inference_time, quality_metrics
 
 
 def main() -> None:
@@ -196,18 +236,23 @@ def main() -> None:
 
         logger.info(f"\nProcessing: {input_path}")
 
-        inference_time = process_single_image(
+        inference_time, quality_metrics = process_single_image(
             model=model,
             input_path=input_path,
             output_path=output_path,
             save_comparison=args.save_comparison,
             benchmark=args.benchmark,
+            report_quality_metrics=args.report_quality_metrics,
         )
 
         logger.info(f"Output saved to: {output_path}")
 
         if args.benchmark:
             logger.info(f"Inference time: {inference_time:.3f}s")
+
+        if quality_metrics:
+            for name, value in quality_metrics.items():
+                logger.info(f"Quality metric {name.upper()}: {value:.4f}")
 
         if args.save_comparison:
             comparison_path = (
@@ -243,6 +288,7 @@ def main() -> None:
 
         # Process images
         total_time = 0.0
+        per_image_quality: Dict[str, Dict[str, float]] = {}
 
         pbar = tqdm(image_files, desc="Processing images")
 
@@ -256,15 +302,18 @@ def main() -> None:
 
             # Process
             try:
-                inference_time = process_single_image(
+                inference_time, quality_metrics = process_single_image(
                     model=model,
                     input_path=img_path,
                     output_path=output_path,
                     save_comparison=args.save_comparison,
                     benchmark=args.benchmark,
+                    report_quality_metrics=args.report_quality_metrics,
                 )
 
                 total_time += inference_time
+                if quality_metrics:
+                    per_image_quality[str(output_path)] = quality_metrics
 
                 # Update progress bar
                 if args.benchmark:
@@ -285,6 +334,26 @@ def main() -> None:
             logger.info(f"  Total time: {total_time:.2f}s")
             logger.info(f"  Average time per image: {avg_time:.3f}s")
             logger.info(f"  Average FPS: {1 / avg_time:.1f}")
+
+        if per_image_quality:
+            aggregate: Dict[str, float] = {}
+            metric_names = next(iter(per_image_quality.values())).keys()
+            for name in metric_names:
+                values = [m[name] for m in per_image_quality.values()]
+                aggregate[name] = sum(values) / len(values)
+
+            logger.info("\nQuality Metrics (no-reference):")
+            for name, value in aggregate.items():
+                logger.info(f"  Average {name.upper()}: {value:.4f}")
+
+            quality_results: Dict[str, Any] = {
+                "aggregate": aggregate,
+                "per_image": per_image_quality,
+            }
+            quality_file = output_dir / "quality_metrics.json"
+            with open(quality_file, "w") as f:
+                json.dump(quality_results, f, indent=2)
+            logger.info(f"  Quality metrics saved to {quality_file}")
 
     logger.info("\n" + "=" * 80)
     logger.info("Inference completed successfully!")

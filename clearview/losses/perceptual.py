@@ -202,3 +202,65 @@ class PerceptualLoss(VGGPerceptualLoss):
     """Alias for VGGPerceptualLoss for backward compatibility."""
 
     pass
+
+
+class DISTSLoss(BaseLoss):
+    """Deep Image Structure and Texture Similarity (DISTS) loss.
+
+    Unlike SSIM/VGG-perceptual losses, DISTS is explicitly designed to be
+    invariant to small geometric distortions (e.g. mild resampling/texture
+    jitter) while remaining sensitive to structural and textural differences
+    — making it well suited for scoring restoration quality on regions with
+    fine, repetitive texture (foliage, brick, gravel) that plain pixel/SSIM
+    losses tend to over-penalize.
+
+    Requires the optional ``piq`` package: ``pip install piq``.
+
+    Args:
+        reduction: Reduction method. Default: 'mean'
+        weight: Loss weight. Default: 1.0
+
+    Reference:
+        Ding et al. "Image Quality Assessment: Unifying Structure and
+        Texture Similarity." TPAMI 2020.
+
+    Example:
+        >>> loss_fn = DISTSLoss()
+        >>> pred = torch.rand(4, 3, 256, 256)
+        >>> target = torch.rand(4, 3, 256, 256)
+        >>> loss = loss_fn(pred, target)
+    """
+
+    def __init__(
+        self,
+        reduction: str = "mean",
+        weight: float = 1.0,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize DISTS loss."""
+        super().__init__(reduction=reduction, weight=weight, **kwargs)
+
+        try:
+            import piq
+        except ImportError as e:
+            raise ImportError(
+                "The 'piq' package is required for DISTSLoss(). "
+                "Install it with `pip install piq`."
+            ) from e
+
+        self._dists = piq.DISTS(reduction=reduction)
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        """Compute DISTS loss between prediction and target.
+
+        Args:
+            pred: Predicted image (B, 3, H, W), values in [0, 1]
+            target: Target image (B, 3, H, W), values in [0, 1]
+
+        Returns:
+            Weighted DISTS loss value
+        """
+        pred_clamped = pred.clamp(0.0, 1.0)
+        target_clamped = target.clamp(0.0, 1.0)
+        loss = self._dists(pred_clamped, target_clamped)
+        return self.apply_weight(loss)

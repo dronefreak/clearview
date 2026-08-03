@@ -3,7 +3,14 @@
 import pytest
 import torch
 
-from clearview.losses.pixel import CharbonnierLoss, L1Loss, L2Loss, MAELoss, MSELoss
+from clearview.losses.pixel import (
+    CharbonnierLoss,
+    ColorConsistencyLoss,
+    L1Loss,
+    L2Loss,
+    MAELoss,
+    MSELoss,
+)
 from clearview.losses.structural import MultiScaleSSIMLoss, SSIMLoss
 
 
@@ -206,6 +213,79 @@ class TestCharbonnierLoss:
         config = loss_fn.get_config()
         assert config["epsilon"] == 1e-3
         assert config["weight"] == 2.0
+
+
+class TestColorConsistencyLoss:
+    """Tests for ColorConsistencyLoss."""
+
+    def test_initialization(self) -> None:
+        """Test ColorConsistencyLoss initialization."""
+        loss_fn = ColorConsistencyLoss(use_std=False, weight=2.0)
+        assert loss_fn.use_std is False
+        assert loss_fn.weight == 2.0
+
+    def test_default_use_std_true(self) -> None:
+        """Test that use_std defaults to True."""
+        loss_fn = ColorConsistencyLoss()
+        assert loss_fn.use_std is True
+
+    def test_forward_pass(self) -> None:
+        """Test ColorConsistencyLoss forward pass."""
+        loss_fn = ColorConsistencyLoss()
+        pred = torch.rand(4, 3, 64, 64)
+        target = torch.rand(4, 3, 64, 64)
+        loss = loss_fn(pred, target)
+        assert isinstance(loss, torch.Tensor)
+        assert loss.ndim == 0
+        assert torch.isfinite(loss)
+
+    def test_identical_inputs_zero(self) -> None:
+        """Test that identical inputs give zero loss."""
+        loss_fn = ColorConsistencyLoss()
+        x = torch.rand(4, 3, 64, 64)
+        loss = loss_fn(x, x)
+        assert loss.item() == pytest.approx(0.0, abs=1e-6)
+
+    def test_color_cast_detected(self) -> None:
+        """Test that a global color shift produces a positive loss."""
+        loss_fn = ColorConsistencyLoss(use_std=False)
+        target = torch.rand(2, 3, 64, 64)
+        pred = (target + 0.2).clamp(0, 1)
+        loss = loss_fn(pred, target)
+        assert loss.item() > 0
+
+    def test_use_std_false_ignores_contrast_mismatch(self) -> None:
+        """Test that std mismatch only affects the loss when use_std=True."""
+        target = torch.rand(2, 3, 64, 64)
+        # Same mean, different contrast.
+        pred = (target - target.mean(dim=(-2, -1), keepdim=True)) * 2.0 + target.mean(
+            dim=(-2, -1), keepdim=True
+        )
+        pred = pred.clamp(0, 1)
+
+        loss_no_std = ColorConsistencyLoss(use_std=False)(pred, target)
+        loss_with_std = ColorConsistencyLoss(use_std=True)(pred, target)
+
+        assert loss_with_std.item() >= loss_no_std.item()
+
+    def test_gradient_flow(self) -> None:
+        """Test that gradients flow through the loss."""
+        loss_fn = ColorConsistencyLoss()
+        pred = torch.rand(2, 3, 64, 64, requires_grad=True)
+        target = torch.rand(2, 3, 64, 64)
+
+        loss = loss_fn(pred, target)
+        loss.backward()
+
+        assert pred.grad is not None
+        assert torch.isfinite(pred.grad).all()
+
+    def test_get_config(self) -> None:
+        """Test ColorConsistencyLoss get_config method."""
+        loss_fn = ColorConsistencyLoss(use_std=False, weight=0.5)
+        config = loss_fn.get_config()
+        assert config["use_std"] is False
+        assert config["weight"] == 0.5
 
 
 class TestSSIMLoss:

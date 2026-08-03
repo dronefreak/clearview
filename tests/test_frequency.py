@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from clearview.losses.combined import CombinedLoss
-from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss
+from clearview.losses.frequency import FFTLoss, FocalFrequencyLoss, WaveletLoss
 
 
 class TestFFTLoss:
@@ -145,10 +145,89 @@ class TestFocalFrequencyLoss:
         assert config["ave_spectrum"] is True
 
 
+class TestWaveletLoss:
+    """Tests for WaveletLoss."""
+
+    def test_initialization(self) -> None:
+        """Test WaveletLoss initialization."""
+        loss_fn = WaveletLoss(levels=2, detail_weight=2.0)
+        assert loss_fn.levels == 2
+        assert loss_fn.detail_weight == 2.0
+        assert loss_fn.weight == 1.0
+
+    def test_invalid_levels_raises(self) -> None:
+        """Test that levels < 1 raises ValueError."""
+        with pytest.raises(ValueError, match="levels must be"):
+            WaveletLoss(levels=0)
+
+    def test_reduction_none_raises(self) -> None:
+        """Test that reduction='none' is rejected."""
+        with pytest.raises(ValueError, match="reduction='none'"):
+            WaveletLoss(reduction="none")
+
+    def test_forward_pass(self) -> None:
+        """Test WaveletLoss forward pass returns a finite scalar."""
+        loss_fn = WaveletLoss()
+        pred = torch.randn(2, 3, 64, 64)
+        target = torch.randn(2, 3, 64, 64)
+        loss = loss_fn(pred, target)
+        assert isinstance(loss, torch.Tensor)
+        assert loss.ndim == 0
+        assert torch.isfinite(loss)
+
+    def test_identical_inputs_near_zero(self) -> None:
+        """Test that identical inputs give a near-zero loss."""
+        loss_fn = WaveletLoss()
+        x = torch.randn(2, 3, 64, 64)
+        loss = loss_fn(x, x)
+        assert loss.item() == pytest.approx(0.0, abs=1e-5)
+
+    def test_odd_sized_input(self) -> None:
+        """Test that odd spatial dimensions are handled via padding."""
+        loss_fn = WaveletLoss(levels=2)
+        pred = torch.randn(1, 3, 33, 37)
+        target = torch.randn(1, 3, 33, 37)
+        loss = loss_fn(pred, target)
+        assert torch.isfinite(loss)
+
+    def test_multiple_levels_increase_loss_terms(self) -> None:
+        """Test that more decomposition levels changes the loss value."""
+        pred = torch.randn(2, 3, 64, 64)
+        target = torch.randn(2, 3, 64, 64)
+
+        loss_1 = WaveletLoss(levels=1)(pred, target)
+        loss_3 = WaveletLoss(levels=3)(pred, target)
+
+        assert torch.isfinite(loss_1)
+        assert torch.isfinite(loss_3)
+
+    def test_gradient_flow(self) -> None:
+        """Test that gradients flow through the loss."""
+        loss_fn = WaveletLoss()
+        pred = torch.randn(2, 3, 64, 64, requires_grad=True)
+        target = torch.randn(2, 3, 64, 64)
+
+        loss = loss_fn(pred, target)
+        loss.backward()
+
+        assert pred.grad is not None
+        assert torch.isfinite(pred.grad).all()
+
+    def test_get_config(self) -> None:
+        """Test WaveletLoss get_config method."""
+        loss_fn = WaveletLoss(levels=3, detail_weight=1.5, weight=0.5)
+        config = loss_fn.get_config()
+        assert config["levels"] == 3
+        assert config["detail_weight"] == 1.5
+        assert config["weight"] == 0.5
+
+
 class TestFrequencyLossCombinedIntegration:
     """Tests for integrating frequency losses via CombinedLoss.from_config."""
 
-    @pytest.mark.parametrize("name", ["fft", "frequency", "focal_frequency", "ffl"])
+    @pytest.mark.parametrize(
+        "name", ["fft", "frequency", "focal_frequency", "ffl", "wavelet"]
+    )
     def test_from_config_registers_frequency_losses(self, name: str) -> None:
         """Test that frequency losses are resolvable by name in CombinedLoss."""
         loss_fn = CombinedLoss.from_config({name: {"weight": 0.1}})

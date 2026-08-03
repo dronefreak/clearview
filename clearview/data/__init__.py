@@ -12,6 +12,7 @@ from clearview.data.datasets import (
     Rain100Dataset,
     Rain1400Dataset,
     SingleFolderDataset,
+    SPADataDataset,
     SyntheticRainDataset,
 )
 from clearview.data.transforms import (
@@ -36,6 +37,7 @@ __all__ = [
     "Rain13KDataset",
     "DDNDataDataset",
     "DIDDataDataset",
+    "SPADataDataset",
     "SyntheticRainDataset",
     # Transforms
     "PairedTransform",

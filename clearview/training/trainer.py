@@ -54,6 +54,18 @@ class Trainer:
             back to eager mode with a warning if compilation fails.
         compile_kwargs: Extra keyword arguments forwarded to
             ``torch.compile()`` (e.g. ``{'mode': 'reduce-overhead'}``)
+        channels_last: Use ``torch.channels_last`` (NHWC) memory format for
+            the model and input batches instead of the default contiguous
+            (NCHW) format. Can noticeably speed up convolutional models on
+            modern GPUs with Tensor Cores when combined with mixed
+            precision. Only affects 4D (image) tensors.
+        amp_dtype: Autocast dtype to use when ``mixed_precision=True``.
+            Default: ``torch.float16``. Use ``torch.bfloat16`` on
+            Ampere+ GPUs (or CPUs) to avoid gradient-scaling overhead and
+            reduce the risk of overflow, at a small cost in precision.
+            When ``amp_dtype`` is ``torch.bfloat16``, the internal
+            ``GradScaler`` is disabled since bfloat16 does not need loss
+            scaling.
 
     Example:
         >>> from clearview import UNet
@@ -103,14 +115,21 @@ class Trainer:
         validate_with_ema: bool = True,
         compile_model: bool = False,
         compile_kwargs: Optional[Dict[str, Any]] = None,
+        channels_last: bool = False,
+        amp_dtype: torch.dtype = torch.float16,
     ) -> None:
         """Initialize trainer."""
-        self.model = model.to(device)
+        self.channels_last = channels_last
+        self._memory_format = (
+            torch.channels_last if channels_last else torch.contiguous_format
+        )
+        self.model = model.to(device, memory_format=self._memory_format)
         self.optimizer = optimizer
         self.loss_fn = loss_fn.to(device)
         self.device = device
         self.gradient_clip_val = gradient_clip_val
         self.mixed_precision = mixed_precision
+        self.amp_dtype = amp_dtype
         self.accumulation_steps = max(1, accumulation_steps)
 
         # Optionally compile the model for faster training/inference
@@ -163,8 +182,15 @@ class Trainer:
                         f"Failed to set optimizer on {callback.__class__.__name__}: {e}"
                     )
 
-        # Mixed precision scaler
-        self.scaler = torch.cuda.amp.GradScaler() if mixed_precision else None
+        # Mixed precision scaler. bfloat16 does not need loss scaling (it
+        # has the same exponent range as float32), so disable the scaler
+        # in that case — GradScaler(enabled=False) makes scale()/step()/
+        # update() transparent pass-throughs, so the rest of the training
+        # loop doesn't need a separate code path.
+        self.scaler = torch.amp.GradScaler(
+            device=self.device.split(":")[0],
+            enabled=mixed_precision and self.amp_dtype == torch.float16,
+        )
 
         # Training state
         self.epoch: int = 0
@@ -186,6 +212,18 @@ class Trainer:
         compiled/eager runs.
         """
         return getattr(self.model, "_orig_mod", self.model)
+
+    def _to_device(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Move a tensor to the trainer's device and memory format.
+
+        Applies ``torch.channels_last`` (NHWC) memory format when
+        ``channels_last=True`` was passed to the constructor; this only
+        makes sense for 4D (N, C, H, W) image tensors, so lower-dimensional
+        tensors are moved without a memory-format change.
+        """
+        if self.channels_last and tensor.dim() == 4:
+            return tensor.to(self.device, memory_format=torch.channels_last)
+        return tensor.to(self.device)
 
     def train_epoch(self, train_loader: DataLoader) -> Dict[str, float]:
         """Train for one epoch.
@@ -209,10 +247,10 @@ class Trainer:
         for batch_idx, batch in enumerate(pbar):
             # Get data
             if isinstance(batch, (tuple, list)):
-                rainy, clean = batch[0].to(self.device), batch[1].to(self.device)
+                rainy, clean = self._to_device(batch[0]), self._to_device(batch[1])
             else:
-                rainy = batch["rainy"].to(self.device)
-                clean = batch["clean"].to(self.device)
+                rainy = self._to_device(batch["rainy"])
+                clean = self._to_device(batch["clean"])
 
             # Callback
             self.callbacks.on_batch_begin(batch_idx)
@@ -224,7 +262,9 @@ class Trainer:
 
             # Forward pass
             if self.mixed_precision:
-                with torch.cuda.amp.autocast():
+                with torch.autocast(
+                    device_type=self.device.split(":")[0], dtype=self.amp_dtype
+                ):
                     output = self.model(rainy)
                     loss = self.loss_fn(output, clean)
 
@@ -313,10 +353,10 @@ class Trainer:
         for batch in pbar:
             # Get data
             if isinstance(batch, (tuple, list)):
-                rainy, clean = batch[0].to(self.device), batch[1].to(self.device)
+                rainy, clean = self._to_device(batch[0]), self._to_device(batch[1])
             else:
-                rainy = batch["rainy"].to(self.device)
-                clean = batch["clean"].to(self.device)
+                rainy = self._to_device(batch["rainy"])
+                clean = self._to_device(batch["clean"])
 
             # Forward pass
             output = self.model(rainy)

@@ -22,13 +22,17 @@ from clearview.utils.logger import (
     setup_logging,
 )
 from clearview.utils.metrics import (
+    ALL_METRICS,
     MetricsTracker,
     compute_brisque,
+    compute_dists,
+    compute_fid,
     compute_lpips,
     compute_mae,
     compute_metrics,
     compute_mse,
     compute_psnr,
+    compute_rain_removal_rate,
     compute_ssim,
 )
 from clearview.utils.niqe import NIQEModel, compute_niqe, fit_niqe_model
@@ -47,8 +51,12 @@ __all__ = [
     "compute_mae",
     "compute_mse",
     "compute_lpips",
+    "compute_dists",
     "compute_brisque",
+    "compute_rain_removal_rate",
+    "compute_fid",
     "compute_metrics",
+    "ALL_METRICS",
     "MetricsTracker",
     # No-reference NIQE
     "NIQEModel",

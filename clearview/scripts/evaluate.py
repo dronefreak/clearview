@@ -5,7 +5,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader
@@ -16,18 +16,54 @@ from clearview.data import (
     ImagePairDataset,
     Rain100Dataset,
     Rain1400Dataset,
+    SPADataDataset,
     get_val_transforms,
 )
+from clearview.models import list_models
 from clearview.utils import (
+    ALL_METRICS,
     MetricsTracker,
+    compute_fid,
     compute_metrics,
     create_comparison_grid,
     plot_metric_histogram,
     save_comparison,
     setup_logging,
 )
+from clearview.utils.niqe import fit_niqe_model
 
 logger = logging.getLogger(__name__)
+
+
+def _filter_available_metrics(metrics: List[str]) -> List[str]:
+    """Drop requested metrics whose optional dependency isn't installed.
+
+    Warns (rather than raising) so evaluation can still run and report
+    every metric it *can* compute even if e.g. ``lpips``/``piq`` are
+    missing from the environment.
+    """
+    optional_deps = {
+        "lpips": "lpips",
+        "dists": "piq",
+        "brisque": "piq",
+        "niqe": None,  # pure-numpy, no optional dependency
+    }
+
+    available = []
+    for metric in metrics:
+        dep = optional_deps.get(metric.lower())
+        if dep is not None:
+            try:
+                __import__(dep)
+            except ImportError:
+                logger.warning(
+                    f"Skipping metric '{metric}': requires the optional "
+                    f"'{dep}' package (pip install {dep})"
+                )
+                continue
+        available.append(metric)
+
+    return available
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,16 +78,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="unet",
-        choices=[
-            "unet",
-            "attention_unet",
-            "resnet_unet",
-            "resnet18_unet",
-            "resnet34_unet",
-            "resnet50_unet",
-            "resnet101_unet",
-            "resnet152_unet",
-        ],
+        choices=list_models(),
         help="Model architecture",
     )
     parser.add_argument(
@@ -66,8 +93,10 @@ def parse_args() -> argparse.Namespace:
         "--dataset-type",
         type=str,
         default="pair",
-        choices=["pair", "rain100", "rain1400"],
-        help="Dataset type",
+        choices=["pair", "rain100", "rain1400", "spa-data"],
+        help="Dataset type. 'spa-data' expects --data-dir to point directly "
+        "at a split directory (e.g. .../SPA-Data/val) and auto-detects the "
+        "rain/norain subdirectory names within it.",
     )
     parser.add_argument(
         "--rainy-dir", type=str, default="rainy", help="Rainy images subdirectory"
@@ -87,8 +116,29 @@ def parse_args() -> argparse.Namespace:
         "--metrics",
         type=str,
         nargs="+",
-        default=["psnr", "ssim", "mae", "mse"],
-        help="Metrics to compute",
+        default=list(ALL_METRICS),
+        help="Metrics to compute and log. Defaults to every metric "
+        f"implemented in clearview.utils.metrics (currently: {ALL_METRICS}). "
+        "'lpips'/'dists'/'brisque' require the optional 'lpips'/'piq' "
+        "packages and are skipped with a warning if unavailable. 'niqe' "
+        "fits a reference model from a sample of this dataset's clean "
+        "images (see --niqe-fit-samples). 'rain_removal_rate' uses the "
+        "rainy input image automatically.",
+    )
+    parser.add_argument(
+        "--niqe-fit-samples",
+        type=int,
+        default=50,
+        help="Number of clean images used to fit the NIQE reference model "
+        "when 'niqe' is included in --metrics",
+    )
+    parser.add_argument(
+        "--compute-fid",
+        action="store_true",
+        help="Also compute FID (Frechet Inception Distance) between all "
+        "derained and clean images across the full dataset. Requires the "
+        "optional 'piq' package. This is a distribution-level metric "
+        "(not per-image) and is reported separately from --metrics.",
     )
 
     # Output arguments
@@ -122,11 +172,14 @@ def evaluate(
     output_dir: Path,
     save_images: bool = False,
     num_vis: int = 10,
+    niqe_fit_samples: int = 50,
+    compute_fid_score: bool = False,
 ) -> Tuple[
     Dict[str, float],
     Dict[str, Dict[str, float]],
     Dict[str, List[float]],
     List[Tuple[Any, Any, Any]],
+    Optional[float],
 ]:
     """Evaluate model on dataset."""
     model.eval()
@@ -138,6 +191,28 @@ def evaluate(
 
     # Metric lists for histogram
     metric_values: Dict[str, List[float]] = {m: [] for m in metrics}
+
+    # NIQE requires a reference model fitted on pristine (clean) images.
+    niqe_model = None
+    if "niqe" in metrics:
+        logger.info(
+            f"Fitting NIQE reference model from up to {niqe_fit_samples} "
+            "clean images..."
+        )
+        reference_images = []
+        for batch in dataloader:
+            clean = batch[1] if isinstance(batch, (tuple, list)) else batch["clean"]
+            for i in range(clean.size(0)):
+                reference_images.append(clean[i])
+                if len(reference_images) >= niqe_fit_samples:
+                    break
+            if len(reference_images) >= niqe_fit_samples:
+                break
+        niqe_model = fit_niqe_model(reference_images)
+
+    # Accumulators for the optional (distribution-level) FID score
+    fid_real_images: List[torch.Tensor] = []
+    fid_fake_images: List[torch.Tensor] = []
 
     logger.info("Starting evaluation...")
 
@@ -155,7 +230,13 @@ def evaluate(
         derained = model.process_batch(rainy)
 
         # Compute metrics
-        batch_metrics = compute_metrics(derained.cpu(), clean.cpu(), metrics=metrics)
+        batch_metrics = compute_metrics(
+            derained.cpu(),
+            clean.cpu(),
+            metrics=metrics,
+            rainy=rainy.cpu(),
+            niqe_model=niqe_model,
+        )
 
         metrics_tracker.update(batch_metrics, batch_size=rainy.size(0))
 
@@ -167,6 +248,10 @@ def evaluate(
         # Update progress bar
         avg_metrics = metrics_tracker.average()
         pbar.set_postfix({k: f"{v:.2f}" for k, v in avg_metrics.items()})
+
+        if compute_fid_score:
+            fid_real_images.append(clean.cpu())
+            fid_fake_images.append(derained.cpu())
 
         # Save images
         if save_images and idx < num_vis:
@@ -190,7 +275,14 @@ def evaluate(
     final_metrics = metrics_tracker.average()
     summary = metrics_tracker.summary()
 
-    return final_metrics, summary, metric_values, vis_samples
+    fid_score: Optional[float] = None
+    if compute_fid_score:
+        logger.info("Computing FID over the full dataset...")
+        fid_score = compute_fid(
+            torch.cat(fid_real_images, dim=0), torch.cat(fid_fake_images, dim=0)
+        )
+
+    return final_metrics, summary, metric_values, vis_samples, fid_score
 
 
 def main() -> None:
@@ -248,6 +340,8 @@ def main() -> None:
             clean_dir=data_dir / args.clean_dir,
             transform=transform,
         )
+    elif args.dataset_type == "spa-data":
+        dataset = SPADataDataset(root_dir=data_dir, transform=transform)
     else:  # pair
         dataset = ImagePairDataset(
             rainy_dir=data_dir / args.rainy_dir,
@@ -271,13 +365,18 @@ def main() -> None:
     logger.info("Running evaluation")
     logger.info("=" * 80)
 
-    final_metrics, summary, metric_values, vis_samples = evaluate(
+    requested_metrics = _filter_available_metrics(args.metrics)
+    logger.info(f"Metrics: {requested_metrics}")
+
+    final_metrics, summary, metric_values, vis_samples, fid_score = evaluate(
         model=model,
         dataloader=dataloader,
-        metrics=args.metrics,
+        metrics=requested_metrics,
         output_dir=output_dir,
         save_images=args.save_images,
         num_vis=args.num_vis,
+        niqe_fit_samples=args.niqe_fit_samples,
+        compute_fid_score=args.compute_fid,
     )
 
     # Print results
@@ -294,6 +393,9 @@ def main() -> None:
             f"max={metric_summary['max']:.4f})"
         )
 
+    if fid_score is not None:
+        logger.info(f"FID: {fid_score:.4f}")
+
     # Save results to JSON
     results = {
         "model": args.model,
@@ -302,6 +404,7 @@ def main() -> None:
         "num_samples": len(dataset),
         "metrics": final_metrics,
         "summary": summary,
+        "fid": fid_score,
     }
 
     results_file = output_dir / "results.json"

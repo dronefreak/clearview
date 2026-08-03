@@ -10,13 +10,17 @@ import pytest
 import torch
 
 from clearview.utils.metrics import (
+    ALL_METRICS,
     MetricsTracker,
     compute_brisque,
+    compute_dists,
+    compute_fid,
     compute_lpips,
     compute_mae,
     compute_metrics,
     compute_mse,
     compute_psnr,
+    compute_rain_removal_rate,
 )
 
 
@@ -376,6 +380,188 @@ class TestComputeBRISQUE:
 
         with pytest.raises(TypeError):
             compute_brisque(image)
+
+
+class TestComputeDISTS:
+    """Tests for DISTS computation (requires the optional `piq` package)."""
+
+    def test_dists_identical_images_near_zero(self):
+        """Test DISTS is near zero for identical images."""
+        pytest.importorskip("piq")
+        pred = torch.rand(2, 3, 64, 64)
+        target = pred.clone()
+
+        dists = compute_dists(pred, target)
+
+        assert isinstance(dists, float)
+        assert dists == pytest.approx(0.0, abs=1e-4)
+
+    def test_dists_different_images_positive(self):
+        """Test DISTS is positive for different images."""
+        pytest.importorskip("piq")
+        pred = torch.rand(2, 3, 64, 64)
+        target = torch.rand(2, 3, 64, 64)
+
+        dists = compute_dists(pred, target)
+
+        assert dists > 0
+        assert isinstance(dists, float)
+
+    def test_dists_reduction_none(self):
+        """Test DISTS with no reduction returns per-image values."""
+        pytest.importorskip("piq")
+        batch_size = 2
+        pred = torch.rand(batch_size, 3, 64, 64)
+        target = torch.rand(batch_size, 3, 64, 64)
+
+        dists = compute_dists(pred, target, reduction="none")
+
+        assert isinstance(dists, torch.Tensor)
+        assert dists.shape == (batch_size,)
+
+    def test_dists_type_mismatch_error(self):
+        """Test that non-tensor inputs raise TypeError."""
+        pytest.importorskip("piq")
+        pred = torch.rand(1, 3, 32, 32)
+        target = np.random.rand(1, 3, 32, 32)
+
+        with pytest.raises(TypeError):
+            compute_dists(pred, target)
+
+    def test_dists_via_compute_metrics(self):
+        """Test DISTS is reachable through compute_metrics()."""
+        pytest.importorskip("piq")
+        pred = torch.rand(1, 3, 64, 64)
+        target = torch.rand(1, 3, 64, 64)
+
+        results = compute_metrics(pred, target, metrics=["dists"])
+
+        assert "dists" in results
+        assert isinstance(results["dists"], float)
+
+
+class TestComputeRainRemovalRate:
+    """Tests for the Rain Removal Rate metric."""
+
+    def test_perfect_removal_gives_high_score(self):
+        """Test that a derained image identical to clean scores near 1.0."""
+        rainy = torch.rand(2, 3, 64, 64)
+        clean = torch.rand(2, 3, 64, 64)
+        derained = clean.clone()
+
+        rrr = compute_rain_removal_rate(rainy, derained, clean)
+
+        assert isinstance(rrr, float)
+        assert rrr == pytest.approx(1.0, abs=1e-4)
+
+    def test_no_removal_gives_low_score(self):
+        """Test that leaving the rainy image untouched scores near 0.0."""
+        rainy = torch.rand(2, 3, 64, 64)
+        clean = torch.rand(2, 3, 64, 64)
+        derained = rainy.clone()
+
+        rrr = compute_rain_removal_rate(rainy, derained, clean)
+
+        assert rrr == pytest.approx(0.0, abs=1e-4)
+
+    def test_reduction_none(self):
+        """Test per-image rain removal rate scores."""
+        batch_size = 3
+        rainy = torch.rand(batch_size, 3, 64, 64)
+        clean = torch.rand(batch_size, 3, 64, 64)
+        derained = torch.rand(batch_size, 3, 64, 64)
+
+        rrr = compute_rain_removal_rate(rainy, derained, clean, reduction="none")
+
+        assert isinstance(rrr, torch.Tensor)
+        assert rrr.shape == (batch_size,)
+
+    def test_type_mismatch_error(self):
+        """Test that non-tensor inputs raise TypeError."""
+        rainy = np.random.rand(1, 3, 32, 32)
+        derained = torch.rand(1, 3, 32, 32)
+        clean = torch.rand(1, 3, 32, 32)
+
+        with pytest.raises(TypeError):
+            compute_rain_removal_rate(rainy, derained, clean)
+
+    def test_via_compute_metrics_requires_rainy(self):
+        """Test that compute_metrics() requires the rainy kwarg for this metric."""
+        pred = torch.rand(1, 3, 32, 32)
+        target = torch.rand(1, 3, 32, 32)
+
+        with pytest.raises(ValueError, match="rainy"):
+            compute_metrics(pred, target, metrics=["rain_removal_rate"])
+
+    def test_via_compute_metrics_with_rainy(self):
+        """Test that compute_metrics() computes this metric when rainy is given."""
+        rainy = torch.rand(1, 3, 32, 32)
+        pred = torch.rand(1, 3, 32, 32)
+        target = torch.rand(1, 3, 32, 32)
+
+        results = compute_metrics(
+            pred, target, metrics=["rain_removal_rate"], rainy=rainy
+        )
+
+        assert "rain_removal_rate" in results
+        assert isinstance(results["rain_removal_rate"], float)
+
+
+class TestComputeFID:
+    """Tests for FID computation (requires the optional `piq` package)."""
+
+    def test_fid_identical_distributions_near_zero(self):
+        """Test FID is near zero when comparing a distribution to itself."""
+        pytest.importorskip("piq")
+        images = torch.rand(10, 3, 64, 64)
+
+        score = compute_fid(images, images.clone(), batch_size=5)
+
+        assert isinstance(score, float)
+        assert score == pytest.approx(0.0, abs=1e-2)
+
+    def test_fid_different_distributions_positive(self):
+        """Test FID is positive for visibly different distributions."""
+        pytest.importorskip("piq")
+        real = torch.rand(10, 3, 64, 64)
+        fake = torch.zeros(10, 3, 64, 64)
+
+        score = compute_fid(real, fake, batch_size=5)
+
+        assert score > 0
+
+    def test_fid_type_mismatch_error(self):
+        """Test that non-tensor inputs raise TypeError."""
+        pytest.importorskip("piq")
+        real = np.random.rand(4, 3, 32, 32)
+        fake = torch.rand(4, 3, 32, 32)
+
+        with pytest.raises(TypeError):
+            compute_fid(real, fake)
+
+
+class TestAllMetricsConstant:
+    """Tests for the ALL_METRICS convenience constant."""
+
+    def test_contains_all_known_metric_names(self):
+        """Test that ALL_METRICS lists every metric name compute_metrics() understands."""
+        expected = {
+            "psnr",
+            "ssim",
+            "mae",
+            "mse",
+            "lpips",
+            "dists",
+            "brisque",
+            "rain_removal_rate",
+            "niqe",
+        }
+
+        assert set(ALL_METRICS) == expected
+
+    def test_fid_not_included(self):
+        """Test that FID (distribution-level metric) is excluded from ALL_METRICS."""
+        assert "fid" not in ALL_METRICS
 
 
 class TestMetricsTracker:
