@@ -10,9 +10,20 @@ Example:
     >>> clean_image = model.process(rainy_image)
 """
 
-__version__ = "1.0.0"
 __author__ = "Saumya Kumaar Saksena"
 __license__ = "Apache-2.0"
+
+try:
+    # Single source of truth for the version: the installed package metadata,
+    # which is generated from `pyproject.toml`'s `[project].version`. This
+    # avoids the two files silently drifting out of sync.
+    from importlib.metadata import PackageNotFoundError, version
+
+    __version__ = version("clearview")
+except (ImportError, PackageNotFoundError):
+    # Fallback for editable/uninstalled checkouts (e.g. running from source
+    # without `pip install -e .` having been run yet).
+    __version__ = "1.0.0"
 
 from clearview.losses import (
     CombinedLoss,

@@ -2,12 +2,14 @@
 """Training script for image deraining models."""
 
 import argparse
+import json
 import logging
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import yaml
 from torch.optim import SGD, Adam, AdamW
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR,
@@ -21,17 +23,19 @@ from clearview.data import (
     ImagePairDataset,
     Rain100Dataset,
     Rain1400Dataset,
+    SPADataDataset,
     get_train_transforms,
     get_val_transforms,
 )
 from clearview.losses import CombinedLoss
-from clearview.models import get_model
+from clearview.models import get_model, list_models
 from clearview.training import (
     Callback,
     EarlyStopping,
     LearningRateScheduler,
     ModelCheckpoint,
     Trainer,
+    WarmupCosineScheduler,
 )
 from clearview.utils import plot_training_curves, setup_logging
 
@@ -57,8 +61,12 @@ def parse_args() -> argparse.Namespace:
         "--dataset-type",
         type=str,
         default="pair",
-        choices=["pair", "rain100", "rain1400"],
-        help="Dataset type",
+        choices=["pair", "rain100", "rain1400", "spa-data"],
+        help="Dataset type. 'pair'/'rain100'/'rain1400' use the "
+        "--train-rainy/--train-clean/--val-rainy/--val-clean subdirectory "
+        "overrides. 'spa-data' uses --train-split/--val-split instead (see "
+        "below) since SPADataDataset auto-detects the rain/norain "
+        "subdirectory names within each split.",
     )
     data_group.add_argument(
         "--train-rainy",
@@ -84,6 +92,20 @@ def parse_args() -> argparse.Namespace:
         default="val/clean",
         help="Validation clean images subdirectory",
     )
+    data_group.add_argument(
+        "--train-split",
+        type=str,
+        default="train",
+        help="Training split name, looked up under --data-dir (only used "
+        "with --dataset-type spa-data)",
+    )
+    data_group.add_argument(
+        "--val-split",
+        type=str,
+        default="val",
+        help="Validation split name, looked up under --data-dir (only used "
+        "with --dataset-type spa-data)",
+    )
 
     # Model arguments
     model_group = parser.add_argument_group("Model")
@@ -91,16 +113,7 @@ def parse_args() -> argparse.Namespace:
         "--model",
         type=str,
         default="unet",
-        choices=[
-            "unet",
-            "attention_unet",
-            "resnet_unet",
-            "resnet18_unet",
-            "resnet34_unet",
-            "resnet50_unet",
-            "resnet101_unet",
-            "resnet152_unet",
-        ],
+        choices=list_models(),
         help="Model architecture",
     )
     model_group.add_argument(
@@ -183,7 +196,32 @@ def parse_args() -> argparse.Namespace:
             "l1_l2_ssim_edge_perceptual",
             "custom",
         ],
-        help="Loss function",
+        help="Loss function preset. Ignored (with a warning) if "
+        "--loss-config or --loss-config-file is also given; use 'custom' "
+        "explicitly when relying solely on one of those.",
+    )
+    loss_group.add_argument(
+        "--loss-config",
+        type=str,
+        default=None,
+        help="Arbitrary loss combination as a JSON object mapping loss "
+        "names (from clearview.losses.CombinedLoss's registry — e.g. "
+        "l1, l2, charbonnier, ssim, ms_ssim, edge, sobel, laplacian, "
+        "perceptual, dists, fft, focal_frequency, wavelet, color, "
+        "adversarial) to their keyword arguments, each including a "
+        "'weight'. Example: "
+        '\'{"l1": {"weight": 1.0}, "ssim": {"weight": 0.5}, '
+        '"dists": {"weight": 0.1}}\'. '
+        "Takes precedence over --loss when provided. See also "
+        "--loss-config-file for loading this from a JSON/YAML file.",
+    )
+    loss_group.add_argument(
+        "--loss-config-file",
+        type=str,
+        default=None,
+        help="Path to a JSON or YAML file with the same structure as "
+        "--loss-config (a mapping of loss name -> kwargs incl. 'weight'). "
+        "Takes precedence over both --loss and --loss-config when given.",
     )
     loss_group.add_argument(
         "--l1-weight", type=float, default=1.0, help="L1 loss weight"
@@ -234,6 +272,21 @@ def parse_args() -> argparse.Namespace:
         default=0.5,
         help="Factor for ReduceLROnPlateau",
     )
+    sched_group.add_argument(
+        "--warmup-epochs",
+        type=int,
+        default=0,
+        help="Number of linear warmup epochs before cosine decay begins "
+        "(only used with --scheduler cosine; 0 = no warmup, uses plain "
+        "CosineAnnealingLR)",
+    )
+    sched_group.add_argument(
+        "--warmup-start-lr",
+        type=float,
+        default=0.0,
+        help="Learning rate at the start of warmup (only used when "
+        "--warmup-epochs > 0)",
+    )
 
     # Callbacks arguments
     callback_group = parser.add_argument_group("Callbacks")
@@ -264,6 +317,63 @@ def parse_args() -> argparse.Namespace:
     )
     opt_group.add_argument(
         "--gradient-clip", type=float, default=None, help="Gradient clipping value"
+    )
+    opt_group.add_argument(
+        "--accumulation-steps",
+        type=int,
+        default=1,
+        help="Number of batches to accumulate gradients over before an "
+        "optimizer step (simulates a larger batch size)",
+    )
+    opt_group.add_argument(
+        "--compile",
+        action="store_true",
+        help="Wrap the model with torch.compile() for potentially faster "
+        "training (PyTorch 2.x). Falls back to eager mode with a warning "
+        "if compilation fails.",
+    )
+    opt_group.add_argument(
+        "--compile-mode",
+        type=str,
+        default=None,
+        choices=["default", "reduce-overhead", "max-autotune"],
+        help="torch.compile() mode (only used with --compile)",
+    )
+
+    # EMA (exponential moving average of model weights)
+    ema_group = parser.add_argument_group("EMA")
+    ema_group.add_argument(
+        "--ema",
+        action="store_true",
+        help="Track an exponential moving average of model weights, "
+        "typically yielding better-generalizing weights for validation and "
+        "final checkpoints",
+    )
+    ema_group.add_argument(
+        "--ema-decay",
+        type=float,
+        default=0.999,
+        help="EMA decay rate (higher = smoother/longer averaging window, "
+        "only used with --ema)",
+    )
+    ema_group.add_argument(
+        "--ema-update-after-step",
+        type=int,
+        default=0,
+        help="Number of optimizer steps to skip before EMA tracking begins "
+        "(only used with --ema)",
+    )
+    ema_group.add_argument(
+        "--no-ema-warmup",
+        action="store_true",
+        help="Disable EMA decay warmup ramp-up during early training "
+        "(only used with --ema)",
+    )
+    ema_group.add_argument(
+        "--no-validate-with-ema",
+        action="store_true",
+        help="Validate using raw training weights instead of EMA weights "
+        "(only used with --ema)",
     )
 
     # Output arguments
@@ -348,6 +458,13 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
             clean_dir=data_dir / args.val_clean,
             transform=val_transform,
         )
+    elif args.dataset_type == "spa-data":
+        train_dataset = SPADataDataset(
+            root_dir=data_dir, split=args.train_split, transform=train_transform
+        )
+        val_dataset = SPADataDataset(
+            root_dir=data_dir, split=args.val_split, transform=val_transform
+        )
     else:  # pair
         train_dataset = ImagePairDataset(
             rainy_dir=data_dir / args.train_rainy,
@@ -430,9 +547,69 @@ def setup_optimizer(
     return optimizer
 
 
+def _load_loss_config_file(path: str) -> Dict[str, Dict[str, Any]]:
+    """Load a loss configuration dict from a JSON or YAML file.
+
+    Args:
+        path: Path to a ``.json``, ``.yml``, or ``.yaml`` file containing a
+            mapping of loss name -> keyword arguments (including ``weight``)
+
+    Returns:
+        The parsed loss configuration dict
+
+    Raises:
+        ValueError: If the file's top-level content is not a mapping
+    """
+    file_path = Path(path)
+    text = file_path.read_text()
+
+    if file_path.suffix.lower() == ".json":
+        config = json.loads(text)
+    else:
+        config = yaml.safe_load(text)
+
+    if not isinstance(config, dict):
+        raise ValueError(
+            f"Loss config file {path!r} must contain a top-level mapping of "
+            f"loss name -> kwargs, got {type(config).__name__}"
+        )
+
+    return config
+
+
 def setup_loss(args: argparse.Namespace) -> nn.Module:
-    """Setup loss function."""
-    if args.loss == "l1":
+    """Setup loss function.
+
+    Supports two ways to configure the loss:
+
+    1. A named preset via ``--loss`` (e.g. ``l1_l2_ssim_edge``), tunable
+       with the individual ``--*-weight`` flags.
+    2. An arbitrary combination of any loss registered in
+       ``CombinedLoss.from_config()`` via ``--loss-config`` (inline JSON)
+       or ``--loss-config-file`` (JSON/YAML file) — this is required (and
+       takes precedence over ``--loss``) when ``--loss custom`` is chosen,
+       but can also be used to override any preset directly.
+    """
+    loss_config: Dict[str, Dict[str, Any]]
+
+    if args.loss_config_file is not None:
+        loss_config = _load_loss_config_file(args.loss_config_file)
+        if args.loss != "custom":
+            logger.warning(
+                f"--loss-config-file was given; ignoring --loss={args.loss!r} preset"
+            )
+    elif args.loss_config is not None:
+        loss_config = json.loads(args.loss_config)
+        if args.loss != "custom":
+            logger.warning(
+                f"--loss-config was given; ignoring --loss={args.loss!r} preset"
+            )
+    elif args.loss == "custom":
+        raise ValueError(
+            "--loss custom requires --loss-config or --loss-config-file "
+            "to specify the loss combination"
+        )
+    elif args.loss == "l1":
         loss_config = {"l1": {"weight": 1.0}}
     elif args.loss == "l2":
         loss_config = {"l2": {"weight": 1.0}}
@@ -484,7 +661,19 @@ def setup_scheduler(
         )
         monitor = "val_loss"
     elif args.scheduler == "cosine":
-        scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, verbose=True)
+        if args.warmup_epochs > 0:
+            scheduler = WarmupCosineScheduler(
+                optimizer,
+                warmup_epochs=args.warmup_epochs,
+                total_epochs=args.epochs,
+                warmup_start_lr=args.warmup_start_lr,
+            )
+            logger.info(
+                f"Using cosine annealing with {args.warmup_epochs}-epoch linear "
+                f"warmup (warmup_start_lr={args.warmup_start_lr})"
+            )
+        else:
+            scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, verbose=True)
         monitor = None
     elif args.scheduler == "step":
         scheduler = StepLR(optimizer, step_size=30, gamma=0.1, verbose=True)
@@ -589,6 +778,8 @@ def main() -> None:
     logger.info("Setting up trainer")
     logger.info("=" * 80)
 
+    compile_kwargs = {"mode": args.compile_mode} if args.compile_mode else None
+
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
@@ -598,7 +789,25 @@ def main() -> None:
         metrics=["psnr", "ssim"],
         gradient_clip_val=args.gradient_clip,
         mixed_precision=args.mixed_precision,
+        accumulation_steps=args.accumulation_steps,
+        use_ema=args.ema,
+        ema_decay=args.ema_decay,
+        ema_update_after_step=args.ema_update_after_step,
+        ema_use_warmup=not args.no_ema_warmup,
+        validate_with_ema=not args.no_validate_with_ema,
+        compile_model=args.compile,
+        compile_kwargs=compile_kwargs,
     )
+
+    if args.ema:
+        logger.info(
+            f"EMA enabled (decay={args.ema_decay}, "
+            f"update_after_step={args.ema_update_after_step}, "
+            f"warmup={not args.no_ema_warmup}, "
+            f"validate_with_ema={not args.no_validate_with_ema})"
+        )
+    if args.compile:
+        logger.info(f"torch.compile() enabled (mode={args.compile_mode or 'default'})")
 
     # Resume from checkpoint if specified
     start_epoch = 0

@@ -12,6 +12,25 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
+# All metric names implemented in this module (excluding 'fid', which scores
+# a *distribution* of images rather than a single pred/target pair and is
+# exposed only as the standalone `compute_fid()` function). Handy for
+# scripts that want to log everything currently available; some entries
+# require extra packages ('lpips'/'dists'/'brisque' -> `pip install
+# clearview[metrics]`) or extra arguments passed to `compute_metrics()`
+# ('rain_removal_rate' -> `rainy=...`, 'niqe' -> `niqe_model=...`).
+ALL_METRICS = [
+    "psnr",
+    "ssim",
+    "mae",
+    "mse",
+    "lpips",
+    "dists",
+    "brisque",
+    "rain_removal_rate",
+    "niqe",
+]
+
 # Lazily-populated cache of instantiated LPIPS networks, keyed by
 # "{net}_{device}" so repeated calls don't reload the pretrained backbone.
 _LPIPS_CACHE: Dict[str, Any] = {}
@@ -378,27 +397,279 @@ def compute_brisque(
     return score
 
 
+# Lazily-populated cache of instantiated DISTS networks, keyed by device, so
+# repeated calls don't reload the pretrained backbone.
+_DISTS_CACHE: Dict[str, Any] = {}
+
+
+def compute_dists(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    max_val: float = 1.0,
+    reduction: str = "mean",
+) -> Union[float, torch.Tensor]:
+    """Compute DISTS (Deep Image Structure and Texture Similarity).
+
+    A full-reference perceptual metric that is explicitly designed to be
+    invariant to small geometric/texture-resampling distortions while
+    remaining sensitive to genuine structural and textural differences —
+    useful for scoring restoration quality on fine, repetitive texture
+    (foliage, gravel, brick) that PSNR/SSIM tend to over-penalize.
+
+    Requires the optional ``piq`` package: ``pip install piq``.
+
+    Args:
+        pred: Predicted image (B, C, H, W)
+        target: Target image (same shape as pred)
+        max_val: Maximum possible pixel value (1.0 for normalized images)
+        reduction: 'mean' | 'none'. If 'none', returns per-image scores
+
+    Returns:
+        DISTS distance(s) — lower is more similar
+
+    Raises:
+        ImportError: If the ``piq`` package is not installed
+        TypeError: If pred/target are not torch.Tensor
+
+    Reference:
+        Ding et al. "Image Quality Assessment: Unifying Structure and
+        Texture Similarity." TPAMI 2020.
+
+    Example:
+        >>> pred = torch.rand(4, 3, 256, 256)
+        >>> target = torch.rand(4, 3, 256, 256)
+        >>> dists_dist = compute_dists(pred, target)
+    """
+    try:
+        import piq
+    except ImportError as e:
+        raise ImportError(
+            "The 'piq' package is required for compute_dists(). "
+            "Install it with `pip install piq`."
+        ) from e
+
+    if not isinstance(pred, torch.Tensor) or not isinstance(target, torch.Tensor):
+        raise TypeError("compute_dists() only supports torch.Tensor inputs")
+
+    device = str(pred.device)
+    if device not in _DISTS_CACHE:
+        _DISTS_CACHE[device] = piq.DISTS(reduction="none").to(pred.device)
+    dists_model = _DISTS_CACHE[device]
+
+    pred_scaled = (pred / max_val if max_val != 1.0 else pred).clamp(0.0, 1.0)
+    target_scaled = (target / max_val if max_val != 1.0 else target).clamp(0.0, 1.0)
+
+    with torch.no_grad():
+        score = dists_model(pred_scaled, target_scaled)
+
+    score = score.view(-1)
+
+    if reduction == "mean":
+        return score.mean().item()
+    return score
+
+
+def compute_rain_removal_rate(
+    rainy: torch.Tensor,
+    derained: torch.Tensor,
+    clean: torch.Tensor,
+    reduction: str = "mean",
+) -> Union[float, torch.Tensor]:
+    """Compute the Rain Removal Rate (RRR), a domain-specific deraining metric.
+
+    Rain streaks are thin, high-frequency structures. This metric estimates
+    how much of that high-frequency error (relative to the clean ground
+    truth) has been eliminated by deraining, using the Sobel gradient
+    magnitude of each image's residual against ``clean`` as a proxy for
+    "rain streak energy"::
+
+        e_rainy    = mean(|Sobel(rainy - clean)|)     # streak energy before deraining
+        e_derained = mean(|Sobel(derained - clean)|)  # residual error energy after
+        RRR = 1 - e_derained / e_rainy
+
+    ``RRR == 1.0`` indicates perfect rain removal (no residual high-frequency
+    error vs. the clean image), ``RRR == 0.0`` indicates deraining did
+    nothing, and ``RRR < 0`` indicates the derained output introduced *more*
+    high-frequency error than the original rainy image (e.g. hallucinated
+    artifacts or over-sharpening).
+
+    Args:
+        rainy: Rainy input image (B, C, H, W)
+        derained: Model output image (same shape as ``rainy``)
+        clean: Ground-truth clean image (same shape as ``rainy``)
+        reduction: 'mean' | 'none'. If 'none', returns per-image rates
+
+    Returns:
+        Rain Removal Rate(s) — higher is better (1.0 = perfect removal)
+
+    Raises:
+        TypeError: If any input is not a torch.Tensor
+
+    Example:
+        >>> rainy = torch.rand(4, 3, 256, 256)
+        >>> derained = torch.rand(4, 3, 256, 256)
+        >>> clean = torch.rand(4, 3, 256, 256)
+        >>> rrr = compute_rain_removal_rate(rainy, derained, clean)
+    """
+    if not all(isinstance(t, torch.Tensor) for t in (rainy, derained, clean)):
+        raise TypeError("compute_rain_removal_rate() only supports torch.Tensor inputs")
+
+    def _streak_energy(residual: torch.Tensor) -> torch.Tensor:
+        if residual.size(1) == 3:
+            gray_weights = torch.tensor(
+                [0.299, 0.587, 0.114], device=residual.device, dtype=residual.dtype
+            ).view(1, 3, 1, 1)
+            gray = (residual * gray_weights).sum(dim=1, keepdim=True)
+        elif residual.size(1) == 1:
+            gray = residual
+        else:
+            gray = residual.mean(dim=1, keepdim=True)
+
+        sobel_x = torch.tensor(
+            [[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]],
+            device=residual.device,
+            dtype=residual.dtype,
+        ).view(1, 1, 3, 3)
+        sobel_y = torch.tensor(
+            [[-1.0, -2.0, -1.0], [0.0, 0.0, 0.0], [1.0, 2.0, 1.0]],
+            device=residual.device,
+            dtype=residual.dtype,
+        ).view(1, 1, 3, 3)
+
+        grad_x = F.conv2d(gray, sobel_x, padding=1)
+        grad_y = F.conv2d(gray, sobel_y, padding=1)
+        magnitude = torch.sqrt(grad_x**2 + grad_y**2 + 1e-12)
+        return magnitude.mean(dim=(1, 2, 3))
+
+    eps = 1e-8
+    energy_rainy = _streak_energy(rainy - clean)
+    energy_derained = _streak_energy(derained - clean)
+    rrr = 1.0 - energy_derained / (energy_rainy + eps)
+
+    if reduction == "mean":
+        return rrr.mean().item()
+    return rrr
+
+
+def compute_fid(
+    real_images: torch.Tensor,
+    fake_images: torch.Tensor,
+    batch_size: int = 50,
+    device: Optional[str] = None,
+) -> float:
+    """Compute the Frechet Inception Distance (FID) between two image sets.
+
+    A distribution-level metric — unlike PSNR/SSIM/LPIPS which score
+    individual pairs, FID measures how statistically similar a *set* of
+    generated (derained) images is to a set of real (clean) images in a
+    pretrained InceptionV3 feature space. Primarily useful for GAN-based
+    variants, where per-pixel metrics can look mediocre despite highly
+    realistic outputs.
+
+    Requires the optional ``piq`` package: ``pip install piq``. Downloads
+    pretrained InceptionV3 weights on first use.
+
+    Args:
+        real_images: Set of real/clean images (N, C, H, W), N should be
+            reasonably large (>= ~100) for a statistically meaningful score
+        fake_images: Set of generated/derained images (M, C, H, W)
+        batch_size: Batch size used for InceptionV3 feature extraction
+        device: Device to run feature extraction on. Defaults to
+            ``real_images.device``
+
+    Returns:
+        FID score — lower indicates the two distributions are more similar
+
+    Raises:
+        ImportError: If the ``piq`` package is not installed
+        TypeError: If inputs are not torch.Tensor
+
+    Reference:
+        Heusel et al. "GANs Trained by a Two Time-Scale Update Rule
+        Converge to a Local Nash Equilibrium." NeurIPS 2017.
+
+    Example:
+        >>> real = torch.rand(200, 3, 256, 256)
+        >>> fake = torch.rand(200, 3, 256, 256)
+        >>> fid_score = compute_fid(real, fake)
+    """
+    try:
+        import piq
+    except ImportError as e:
+        raise ImportError(
+            "The 'piq' package is required for compute_fid(). "
+            "Install it with `pip install piq`."
+        ) from e
+
+    if not isinstance(real_images, torch.Tensor) or not isinstance(
+        fake_images, torch.Tensor
+    ):
+        raise TypeError("compute_fid() only supports torch.Tensor inputs")
+
+    device = device or str(real_images.device)
+
+    extractor = piq.feature_extractors.InceptionV3().to(device)
+    extractor.eval()
+
+    def _extract_feats(images: torch.Tensor) -> torch.Tensor:
+        feats = []
+        with torch.no_grad():
+            for start in range(0, images.size(0), batch_size):
+                batch = images[start : start + batch_size].to(device)
+                feat = extractor(batch)[0]
+                feats.append(feat.view(feat.size(0), -1).cpu())
+        return torch.cat(feats, dim=0)
+
+    real_feats = _extract_feats(real_images)
+    fake_feats = _extract_feats(fake_images)
+
+    fid_metric = piq.FID()
+    score = fid_metric(real_feats, fake_feats)
+
+    return float(score.item())
+
+
 def compute_metrics(
     pred: Union[torch.Tensor, np.ndarray],
     target: Union[torch.Tensor, np.ndarray],
     metrics: Optional[List[str]] = None,
     max_val: float = 1.0,
+    rainy: Optional[torch.Tensor] = None,
+    niqe_model: Optional[Any] = None,
 ) -> Dict[str, float]:
     """Compute multiple metrics at once.
 
     Args:
-        pred: Predicted image
-        target: Target image
+        pred: Predicted (derained) image
+        target: Target (clean ground-truth) image
         metrics: List of metrics to compute. If None, computes the default
-            reference-based metrics ('psnr', 'ssim', 'mae', 'mse').
-            Additional opt-in metrics (not included by default since they
-            require extra packages / are more expensive to compute):
-            'lpips' (requires ``lpips``), 'brisque' (requires ``piq``,
-            no-reference — only uses ``pred``, ignores ``target``).
+            reference-based metrics ('psnr', 'ssim', 'mae', 'mse'). See
+            :data:`ALL_METRICS` for the full list of metrics implemented in
+            this module, including opt-in ones that require extra packages
+            or extra arguments:
+
+            - ``'lpips'`` (requires ``lpips``)
+            - ``'dists'`` (requires ``piq``)
+            - ``'brisque'`` (requires ``piq``, no-reference — only uses
+              ``pred``, ignores ``target``)
+            - ``'rain_removal_rate'`` (requires the ``rainy`` input image,
+              passed via the ``rainy`` argument)
+            - ``'niqe'`` (requires a pre-fitted
+              :class:`~clearview.utils.niqe.NIQEModel`, passed via the
+              ``niqe_model`` argument — see
+              :func:`~clearview.utils.niqe.fit_niqe_model`)
         max_val: Maximum pixel value
+        rainy: Rainy input image, required only when ``'rain_removal_rate'``
+            is in ``metrics``
+        niqe_model: Pre-fitted NIQE reference model, required only when
+            ``'niqe'`` is in ``metrics``
 
     Returns:
         Dictionary mapping metric names to values
+
+    Raises:
+        ValueError: If an unknown metric name is given, or a metric's
+            required extra argument (``rainy``/``niqe_model``) is missing
 
     Example:
         >>> pred = torch.randn(4, 3, 256, 256).clamp(0, 1)
@@ -425,8 +696,36 @@ def compute_metrics(
             results["mse"] = compute_mse(pred, target)
         elif metric_lower == "lpips":
             results["lpips"] = compute_lpips(pred, target, max_val=max_val)
+        elif metric_lower == "dists":
+            results["dists"] = compute_dists(pred, target, max_val=max_val)
         elif metric_lower == "brisque":
             results["brisque"] = compute_brisque(pred, max_val=max_val)
+        elif metric_lower == "rain_removal_rate":
+            if rainy is None:
+                raise ValueError(
+                    "metric 'rain_removal_rate' requires the rainy input "
+                    "image, e.g. compute_metrics(pred, target, "
+                    "metrics=['rain_removal_rate'], rainy=rainy_tensor)"
+                )
+            results["rain_removal_rate"] = compute_rain_removal_rate(
+                rainy, pred, target
+            )
+        elif metric_lower == "niqe":
+            if niqe_model is None:
+                raise ValueError(
+                    "metric 'niqe' requires a pre-fitted NIQEModel, e.g. "
+                    "compute_metrics(pred, target, metrics=['niqe'], "
+                    "niqe_model=fit_niqe_model(reference_images)). See "
+                    "clearview.utils.niqe.fit_niqe_model()."
+                )
+            from clearview.utils.niqe import compute_niqe
+
+            if not isinstance(pred, torch.Tensor):
+                raise TypeError("metric 'niqe' only supports torch.Tensor inputs")
+
+            batch = pred if pred.dim() == 4 else pred.unsqueeze(0)
+            scores = [compute_niqe(batch[i], niqe_model) for i in range(batch.size(0))]
+            results["niqe"] = float(np.mean(scores))
         else:
             raise ValueError(f"Unknown metric: {metric}")
 
@@ -517,7 +816,11 @@ __all__ = [
     "compute_mae",
     "compute_mse",
     "compute_lpips",
+    "compute_dists",
     "compute_brisque",
+    "compute_rain_removal_rate",
+    "compute_fid",
     "compute_metrics",
+    "ALL_METRICS",
     "MetricsTracker",
 ]

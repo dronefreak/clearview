@@ -10,7 +10,7 @@ import pytest
 import torch
 import torch.nn as nn
 
-from clearview.losses.perceptual import PerceptualLoss, VGGPerceptualLoss
+from clearview.losses.perceptual import DISTSLoss, PerceptualLoss, VGGPerceptualLoss
 
 
 class MockVGG(nn.Module):
@@ -329,6 +329,71 @@ class TestVGGPerceptualLoss:
         # Check that feature extractors are in eval mode
         for extractor in loss_fn.feature_extractors:
             assert not extractor.training
+
+
+class TestDISTSLoss:
+    """Tests for DISTSLoss (requires the optional `piq` package)."""
+
+    def test_initialization(self):
+        """Test DISTSLoss initialization."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss(weight=2.0)
+        assert loss_fn.weight == 2.0
+
+    def test_forward_identical_images_near_zero(self):
+        """Test that DISTSLoss is near zero for identical images."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss()
+        pred = torch.rand(1, 3, 64, 64, requires_grad=True)
+        target = pred.detach().clone()
+
+        loss = loss_fn(pred, target)
+
+        assert loss.item() == pytest.approx(0.0, abs=1e-4)
+        assert loss.requires_grad
+
+    def test_forward_different_images_positive(self):
+        """Test that DISTSLoss is positive for different images."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss()
+        pred = torch.rand(1, 3, 64, 64, requires_grad=True)
+        target = torch.rand(1, 3, 64, 64)
+
+        loss = loss_fn(pred, target)
+
+        assert loss.item() > 0
+        assert loss.requires_grad
+
+    def test_gradient_flow(self):
+        """Test that gradients flow through DISTSLoss."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss()
+        pred = torch.rand(1, 3, 64, 64, requires_grad=True)
+        target = torch.rand(1, 3, 64, 64)
+
+        loss = loss_fn(pred, target)
+        loss.backward()
+
+        assert pred.grad is not None
+        assert torch.isfinite(pred.grad).all()
+
+    def test_clamps_out_of_range_inputs(self):
+        """Test that inputs outside [0, 1] are clamped rather than erroring."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss()
+        pred = torch.randn(1, 3, 64, 64, requires_grad=True)
+        target = torch.randn(1, 3, 64, 64)
+
+        loss = loss_fn(pred, target)
+
+        assert torch.isfinite(loss)
+
+    def test_get_config(self):
+        """Test DISTSLoss get_config method."""
+        pytest.importorskip("piq")
+        loss_fn = DISTSLoss(weight=0.5)
+        config = loss_fn.get_config()
+        assert config["weight"] == 0.5
 
 
 class TestPerceptualLossIntegration:
