@@ -10,6 +10,7 @@ from clearview.data.datasets import (
     DDNDataDataset,
     DIDDataDataset,
     ImagePairDataset,
+    MixedDataset,
     Rain13KDataset,
     SPADataDataset,
 )
@@ -338,3 +339,89 @@ class TestSPADataDataset:
 
         with pytest.raises(ValueError):
             SPADataDataset(root_dir=root_dir)
+
+
+def _make_pair_dataset(temp_dir: Path, name: str, n: int) -> ImagePairDataset:
+    """Build a tiny ImagePairDataset with n synthetic rainy/clean pairs."""
+    rainy_dir = temp_dir / name / "rainy"
+    clean_dir = temp_dir / name / "clean"
+    rainy_dir.mkdir(parents=True)
+    clean_dir.mkdir(parents=True)
+    for i in range(n):
+        _save_random_image(rainy_dir / f"{i:03d}.png")
+        _save_random_image(clean_dir / f"{i:03d}.png")
+    return ImagePairDataset(rainy_dir=rainy_dir, clean_dir=clean_dir)
+
+
+class TestMixedDataset:
+    """Tests for MixedDataset."""
+
+    def test_length_is_sum_of_sources(self, temp_dir: Path) -> None:
+        """Test that length is the sum of all source dataset lengths."""
+        a = _make_pair_dataset(temp_dir, "a", 3)
+        b = _make_pair_dataset(temp_dir, "b", 5)
+
+        mixed = MixedDataset([a, b])
+
+        assert len(mixed) == 8
+
+    def test_indexing_spans_source_boundaries(self, temp_dir: Path) -> None:
+        """Test that indexing past the first source reaches the second."""
+        a = _make_pair_dataset(temp_dir, "a", 2)
+        b = _make_pair_dataset(temp_dir, "b", 2)
+
+        mixed = MixedDataset([a, b])
+
+        for idx in range(len(mixed)):
+            rainy, clean = mixed[idx]
+            assert rainy.shape == a[0][0].shape
+            assert clean.shape == a[0][1].shape
+
+    def test_empty_datasets_raises(self) -> None:
+        """Test that an empty datasets list raises ValueError."""
+        with pytest.raises(ValueError):
+            MixedDataset([])
+
+    def test_mismatched_weights_length_raises(self, temp_dir: Path) -> None:
+        """Test that a weights list of the wrong length raises ValueError."""
+        a = _make_pair_dataset(temp_dir, "a", 2)
+        b = _make_pair_dataset(temp_dir, "b", 2)
+
+        with pytest.raises(ValueError):
+            MixedDataset([a, b], weights=[1.0])
+
+    def test_default_weights_are_uniform(self, temp_dir: Path) -> None:
+        """Test that sample_weights() defaults to 1.0 per example."""
+        a = _make_pair_dataset(temp_dir, "a", 3)
+        b = _make_pair_dataset(temp_dir, "b", 2)
+
+        mixed = MixedDataset([a, b])
+
+        assert mixed.sample_weights() == [1.0] * 5
+
+    def test_sample_weights_reflect_per_source_weight(self, temp_dir: Path) -> None:
+        """Test that each example inherits its source dataset's weight."""
+        a = _make_pair_dataset(temp_dir, "a", 3)  # e.g. a large synthetic source
+        b = _make_pair_dataset(temp_dir, "b", 2)  # e.g. a small real-world source
+
+        mixed = MixedDataset([a, b], weights=[1.0, 2.0])
+
+        assert mixed.sample_weights() == [1.0, 1.0, 1.0, 2.0, 2.0]
+
+    def test_weighted_sampler_oversamples_small_source(self, temp_dir: Path) -> None:
+        """Test that WeightedRandomSampler actually draws the up-weighted
+        (smaller) source more often than its natural frequency would give."""
+        big = _make_pair_dataset(temp_dir, "big", 90)
+        small = _make_pair_dataset(temp_dir, "small", 10)
+
+        mixed = MixedDataset([big, small], weights=[1.0, 9.0])
+        sampler = torch.utils.data.WeightedRandomSampler(
+            mixed.sample_weights(), num_samples=2000, replacement=True
+        )
+
+        drawn = list(sampler)
+        from_small = sum(1 for idx in drawn if idx >= len(big))
+
+        # Natural frequency would be ~10%; weight=9 on a 9x-smaller source
+        # targets ~50/50, so this should land well above natural frequency.
+        assert from_small / len(drawn) > 0.35

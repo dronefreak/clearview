@@ -8,6 +8,7 @@ from clearview.data.datasets import (
     DDNDataDataset,
     DIDDataDataset,
     ImagePairDataset,
+    MixedDataset,
     Rain13KDataset,
     Rain100Dataset,
     Rain1400Dataset,
@@ -39,6 +40,7 @@ __all__ = [
     "DIDDataDataset",
     "SPADataDataset",
     "SyntheticRainDataset",
+    "MixedDataset",
     # Transforms
     "PairedTransform",
     "RandomCrop",

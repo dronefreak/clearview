@@ -6,12 +6,12 @@ various formats (image pairs, directories, etc.).
 
 import logging
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple, Union, cast
+from typing import Callable, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import torch
 from PIL import Image
-from torch.utils.data import Dataset
+from torch.utils.data import ConcatDataset, Dataset
 
 from clearview.utils.image import numpy_to_tensor
 
@@ -1033,6 +1033,76 @@ class SPADataDataset(Dataset):
         return rainy_tensor, clean_tensor
 
 
+class MixedDataset(ConcatDataset):
+    """Combines multiple paired deraining datasets (e.g. synthetic + real).
+
+    Concatenation itself (via ``ConcatDataset``) preserves each source's
+    natural size -- a source is not automatically up- or down-weighted just
+    because it's larger or smaller than the others. Oversampling small
+    sources (e.g. a real-world dataset dwarfed by a large synthetic one) is
+    opt-in via ``weights`` + :meth:`sample_weights`, consumed by a
+    ``torch.utils.data.WeightedRandomSampler`` -- ``MixedDataset`` itself
+    stays a plain, shuffle-compatible map-style dataset either way.
+
+    Args:
+        datasets: Paired-image datasets to combine (e.g. ``Rain13KDataset``,
+            ``SPADataDataset``, ``ImagePairDataset``). Each must already be
+            transformed to a common output shape (typically via a shared
+            ``RandomCrop`` in each dataset's own ``transform``).
+        weights: Optional per-dataset oversampling weight, same length and
+            order as ``datasets``. A weight of 2.0 means that dataset's
+            pairs are, on average, drawn twice as often per epoch by a
+            sampler built from :meth:`sample_weights`, relative to a
+            weight-1.0 dataset. Defaults to 1.0 (natural frequency) for
+            every dataset if not given.
+
+    Example:
+        >>> from torch.utils.data import DataLoader, WeightedRandomSampler
+        >>> mixed = MixedDataset(
+        ...     [rain13k_train, ddn_train, spa_train, rr1k_h_train, rr1k_l_train],
+        ...     weights=[1.0, 1.0, 2.0, 2.0, 2.0],  # mild oversampling of real data
+        ... )
+        >>> sampler = WeightedRandomSampler(
+        ...     mixed.sample_weights(), num_samples=len(mixed), replacement=True
+        ... )
+        >>> loader = DataLoader(mixed, batch_size=8, sampler=sampler)
+    """
+
+    def __init__(
+        self,
+        datasets: Sequence[Dataset],
+        weights: Optional[Sequence[float]] = None,
+    ) -> None:
+        """Initialize the mixed dataset."""
+        if not datasets:
+            raise ValueError("MixedDataset requires at least one dataset")
+
+        super().__init__(list(datasets))
+
+        if weights is None:
+            weights = [1.0] * len(datasets)
+        elif len(weights) != len(datasets):
+            raise ValueError(
+                f"weights must have the same length as datasets "
+                f"({len(weights)} != {len(datasets)})"
+            )
+
+        self.source_weights: List[float] = list(weights)
+
+    def sample_weights(self) -> List[float]:
+        """Return one weight per example, for use with ``WeightedRandomSampler``.
+
+        Each example inherits its source dataset's configured weight, so a
+        source with weight 2.0 is (on average, with ``replacement=True``)
+        sampled twice as often per epoch as a same-size weight-1.0 source,
+        regardless of how many examples it actually contains.
+        """
+        per_example_weights: List[float] = []
+        for dataset, weight in zip(self.datasets, self.source_weights):
+            per_example_weights.extend([weight] * len(dataset))
+        return per_example_weights
+
+
 __all__ = [
     "ImagePairDataset",
     "SingleFolderDataset",
@@ -1043,4 +1113,5 @@ __all__ = [
     "DDNDataDataset",
     "DIDDataDataset",
     "SPADataDataset",
+    "MixedDataset",
 ]
