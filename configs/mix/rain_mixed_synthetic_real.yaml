@@ -1,0 +1,43 @@
+# Mixed synthetic + real-world rain training set for --mix-config.
+#
+# 5 sources, ~34,264 pairs total (~77% synthetic / ~23% real). Real-world
+# sources (SPA-Data, RealRain-1k-H/L) are mildly oversampled (weight 2.0 vs
+# 1.0 for the two synthetic sources) via --mix-sampler, to push generalization
+# toward real-world rain without hammering the small real sets hard enough to
+# risk memorizing them.
+#
+# Paths assume the unzipped contents of mixed_datasets.zip live at
+# /home/saumya.saksena/projects/mixed_datasets -- update `data_dir` below if
+# unzipped elsewhere.
+
+sources:
+  # Synthetic (weight 1.0 = natural frequency)
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/rain13k/train
+    rainy_dir: input
+    clean_dir: target
+    weight: 1.0
+
+  - dataset_type: rain1400
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/ddn_data/training
+    rainy_dir: rainy_image
+    clean_dir: ground_truth
+    weight: 1.0
+
+  # Real-world (weight 2.0 = mild oversampling)
+  - dataset_type: spa-data
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/spa_data
+    split: train
+    weight: 2.0
+
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_h/train
+    rainy_dir: input
+    clean_dir: target
+    weight: 2.0
+
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_l/train
+    rainy_dir: input
+    clean_dir: target
+    weight: 2.0

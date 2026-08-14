@@ -5,7 +5,7 @@ import argparse
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import torch
 import torch.nn as nn
@@ -17,10 +17,11 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     StepLR,
 )
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 from clearview.data import (
     ImagePairDataset,
+    MixedDataset,
     Rain100Dataset,
     Rain1400Dataset,
     SPADataDataset,
@@ -105,6 +106,26 @@ def parse_args() -> argparse.Namespace:
         default="val",
         help="Validation split name, looked up under --data-dir (only used "
         "with --dataset-type spa-data)",
+    )
+    data_group.add_argument(
+        "--mix-config",
+        type=str,
+        default=None,
+        help="Path to a YAML file listing multiple training sources to "
+        "combine into one MixedDataset (e.g. synthetic + real-world "
+        "datasets), each with its own dataset_type/data_dir/weight. When "
+        "given, this replaces how the *training* dataset is built; "
+        "--data-dir/--dataset-type/--val-split etc. are still used as-is "
+        "for the *validation* dataset (typically a single, real-world "
+        "source). See clearview/scripts/README.md for the file format.",
+    )
+    data_group.add_argument(
+        "--mix-sampler",
+        action="store_true",
+        help="When --mix-config is given, draw training batches with a "
+        "WeightedRandomSampler using each source's configured weight "
+        "(oversampling small sources), instead of a single shuffled pass "
+        "over the concatenated data.",
     )
 
     # Model arguments
@@ -427,6 +448,101 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def _build_dataset(
+    dataset_type: str,
+    data_dir: Path,
+    transform: Any,
+    *,
+    rainy_dir: Optional[str] = None,
+    clean_dir: Optional[str] = None,
+    split: Optional[str] = None,
+) -> Dataset:
+    """Build a single dataset of the given type.
+
+    Shared by both the single-source path (--dataset-type/--data-dir) and
+    each source listed under --mix-config, so the dataset_type -> class
+    mapping only lives in one place.
+    """
+    if dataset_type == "rain100":
+        return Rain100Dataset(root_dir=data_dir / (split or ""), transform=transform)
+    elif dataset_type == "rain1400":
+        return Rain1400Dataset(
+            rainy_dir=data_dir / (rainy_dir or "rainy"),
+            clean_dir=data_dir / (clean_dir or "clean"),
+            transform=transform,
+        )
+    elif dataset_type == "spa-data":
+        return SPADataDataset(root_dir=data_dir, split=split, transform=transform)
+    else:  # pair
+        return ImagePairDataset(
+            rainy_dir=data_dir / (rainy_dir or "rainy"),
+            clean_dir=data_dir / (clean_dir or "clean"),
+            transform=transform,
+        )
+
+
+def _load_mix_config(path: str) -> List[Dict[str, Any]]:
+    """Load and validate a --mix-config YAML file.
+
+    Expected format::
+
+        sources:
+          - dataset_type: pair       # pair | rain100 | rain1400 | spa-data
+            data_dir: /path/to/source
+            rainy_dir: input         # pair/rain1400 only
+            clean_dir: target        # pair/rain1400 only
+            split: train             # spa-data only
+            weight: 1.0              # optional, default 1.0
+
+    Returns:
+        The list of source dicts under the top-level "sources" key.
+
+    Raises:
+        ValueError: If the file has no top-level "sources" list, or any
+            source is missing "data_dir".
+    """
+    with open(path) as f:
+        config = yaml.safe_load(f)
+
+    sources = config.get("sources") if isinstance(config, dict) else None
+    if not sources:
+        raise ValueError(
+            f"--mix-config file {path!r} must contain a top-level "
+            "'sources' list with at least one entry"
+        )
+    for i, source in enumerate(sources):
+        if "data_dir" not in source:
+            raise ValueError(f"--mix-config source #{i} is missing 'data_dir'")
+
+    return cast(List[Dict[str, Any]], sources)
+
+
+def _build_mixed_train_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
+    """Build a MixedDataset from a --mix-config YAML file."""
+    sources = _load_mix_config(mix_config_path)
+
+    datasets = []
+    weights = []
+    for source in sources:
+        dataset = _build_dataset(
+            source.get("dataset_type", "pair"),
+            Path(source["data_dir"]),
+            transform,
+            rainy_dir=source.get("rainy_dir"),
+            clean_dir=source.get("clean_dir"),
+            split=source.get("split"),
+        )
+        datasets.append(dataset)
+        weights.append(float(source.get("weight", 1.0)))
+        logger.info(
+            f"  Mix source: {source['data_dir']} "
+            f"(type={source.get('dataset_type', 'pair')}, "
+            f"weight={weights[-1]}) -> {len(dataset)} pairs"
+        )
+
+    return MixedDataset(datasets, weights=weights)
+
+
 def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     """Setup data loaders."""
     data_dir = Path(args.data_dir)
@@ -441,41 +557,41 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     # Validation transforms
     val_transform = get_val_transforms(crop_size=(args.crop_size, args.crop_size))
 
-    # Create datasets
-    if args.dataset_type == "rain100":
-        train_dataset = Rain100Dataset(
-            root_dir=data_dir / "train", transform=train_transform
+    # Training dataset: either a single source (default) or a MixedDataset
+    # combining multiple sources (--mix-config).
+    train_sampler: Optional[WeightedRandomSampler] = None
+    if args.mix_config is not None:
+        logger.info(f"Building mixed training dataset from {args.mix_config}")
+        train_dataset: Dataset = _build_mixed_train_dataset(
+            args.mix_config, train_transform
         )
-        val_dataset = Rain100Dataset(root_dir=data_dir / "val", transform=val_transform)
-    elif args.dataset_type == "rain1400":
-        train_dataset = Rain1400Dataset(
-            rainy_dir=data_dir / args.train_rainy,
-            clean_dir=data_dir / args.train_clean,
-            transform=train_transform,
+        if args.mix_sampler:
+            train_sampler = WeightedRandomSampler(
+                cast(MixedDataset, train_dataset).sample_weights(),
+                num_samples=len(train_dataset),
+                replacement=True,
+            )
+    else:
+        train_dataset = _build_dataset(
+            args.dataset_type,
+            data_dir,
+            train_transform,
+            rainy_dir=args.train_rainy,
+            clean_dir=args.train_clean,
+            split=args.train_split,
         )
-        val_dataset = Rain1400Dataset(
-            rainy_dir=data_dir / args.val_rainy,
-            clean_dir=data_dir / args.val_clean,
-            transform=val_transform,
-        )
-    elif args.dataset_type == "spa-data":
-        train_dataset = SPADataDataset(
-            root_dir=data_dir, split=args.train_split, transform=train_transform
-        )
-        val_dataset = SPADataDataset(
-            root_dir=data_dir, split=args.val_split, transform=val_transform
-        )
-    else:  # pair
-        train_dataset = ImagePairDataset(
-            rainy_dir=data_dir / args.train_rainy,
-            clean_dir=data_dir / args.train_clean,
-            transform=train_transform,
-        )
-        val_dataset = ImagePairDataset(
-            rainy_dir=data_dir / args.val_rainy,
-            clean_dir=data_dir / args.val_clean,
-            transform=val_transform,
-        )
+
+    # Validation dataset always comes from --data-dir/--dataset-type, even
+    # when --mix-config is used for training (typically a single,
+    # real-world source you want to monitor generalization against).
+    val_dataset = _build_dataset(
+        args.dataset_type,
+        data_dir,
+        val_transform,
+        rainy_dir=args.val_rainy,
+        clean_dir=args.val_clean,
+        split=args.val_split,
+    )
 
     logger.info(f"Training samples: {len(train_dataset)}")
     logger.info(f"Validation samples: {len(val_dataset)}")
@@ -484,7 +600,8 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
-        shuffle=True,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
         num_workers=args.num_workers,
         pin_memory=True,
     )
