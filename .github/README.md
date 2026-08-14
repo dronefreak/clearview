@@ -1,18 +1,13 @@
 # 🌧️ ClearView: Neural Image Deraining
 
-[![🐍 Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white&style=for-the-badge)](https://www.python.org/downloads/)
-[![🔥 PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white&style=for-the-badge)](https://pytorch.org/)
-[![⚖️ License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green?logo=osi&logoColor=white&style=for-the-badge)](https://opensource.org/licenses/Apache-2.0)
-[![🤗 Demo](https://img.shields.io/badge/HuggingFace-Demo-FFD21E?logo=huggingface&logoColor=yellow&style=for-the-badge)](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
-
-> **Fast, deployement-ready static image deraining model** for autonomous driving, surveillance, and photo restoration.  
-> **30.9 PSNR / 0.914 SSIM** on Rain1400 • **~15ms inference** (RTX 4070) • **L1 loss + vanilla UNet = best results**
-
 <p align="center">
   <img src="https://github.com/dronefreak/clearview/raw/main/assets/demo_showcase.jpg" alt="ClearView demo showcase: rainy input vs. derained output across four scenes"/>
 </p>
 
----
+[![🐍 Python 3.8+](https://img.shields.io/badge/Python-3.8+-3776AB?logo=python&logoColor=white&style=for-the-badge)](https://www.python.org/downloads/)
+[![🔥 PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0+-EE4C2C?logo=pytorch&logoColor=white&style=for-the-badge)](https://pytorch.org/)
+[![⚖️ License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green?logo=osi&logoColor=white&style=for-the-badge)](https://opensource.org/licenses/Apache-2.0)
+[![🤗 Demo](https://img.shields.io/badge/HuggingFace-Demo-FFD21E?logo=huggingface&logoColor=yellow&style=for-the-badge)](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
 
 ## 🚀 Quick Start
 
@@ -88,7 +83,7 @@ clearview-train \
 | **UNet (L1)**  | 30.91 | 0.914 | 7.8M   | ~15ms |
 | Attention UNet | 30.04 | 0.910 | 8.9M   | ~20ms |
 
-✅ **Key insight**: L1 loss alone outperforms complex multi-loss combos.  
+✅ **Key insight**: L1 loss alone outperforms complex multi-loss combos.
 ⚠️ **Limitations**: Trained on synthetic rain; slight texture smoothing.
 
 ---
@@ -145,7 +140,7 @@ weights = hf_hub_download("dronefreak/clearview-unet", "clearview-unet.pth")
 
 ## 🤝 Contribute
 
-PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).  
+PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
 Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 
 ---
@@ -161,7 +156,7 @@ Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 }
 ```
 
-**License**: [Apache 2.0](LICENSE)  
+**License**: [Apache 2.0](LICENSE)
 **Author**: [Saumya Kumaar Saksena (@dronefreak)](https://github.com/dronefreak)
 
 ---
