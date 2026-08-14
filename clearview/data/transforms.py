@@ -54,9 +54,11 @@ class RandomCrop(PairedTransform):
         crop_h, crop_w = self.crop_size
 
         if h < crop_h or w < crop_w:
-            raise ValueError(
-                f"Image size ({h}, {w}) is smaller than crop size {self.crop_size}"
-            )
+            # If the image is smaller than the crop size, we resize the image to the crop size instead of raising an error.
+            image = cv2.resize(image, (crop_w, crop_h))
+            if target is not None:
+                target = cv2.resize(target, (crop_w, crop_h))
+            h, w = image.shape[:2]
 
         # Random top-left corner
         top = random.randint(0, h - crop_h)  # nosec B311

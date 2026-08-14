@@ -8,6 +8,10 @@
 > **Fast, deployement-ready static image deraining model** for autonomous driving, surveillance, and photo restoration.  
 > **30.9 PSNR / 0.914 SSIM** on Rain1400 • **~15ms inference** (RTX 4070) • **L1 loss + vanilla UNet = best results**
 
+<p align="center">
+  <img src="https://github.com/dronefreak/clearview/raw/main/assets/demo_showcase.jpg" alt="ClearView demo showcase: rainy input vs. derained output across four scenes"/>
+</p>
+
 ---
 
 ## 🚀 Quick Start
@@ -26,10 +30,44 @@ source .venv/bin/activate
 pip install -r requirements.txt && pip install -e .
 ```
 
+### Pretrained Weights
+
+| Model     | Status           | Weights                                                                                                       |
+| --------- | ---------------- | ------------------------------------------------------------------------------------------------------------- |
+| UNet      | ✅ Available now | [`dronefreak/clearview-derain-unet`](https://huggingface.co/dronefreak/clearview-derain-unet) on Hugging Face |
+| Restormer | 🚧 Coming soon   | —                                                                                                             |
+
+```python
+from huggingface_hub import hf_hub_download
+
+weights = hf_hub_download(
+    repo_id="dronefreak/clearview-derain-unet", filename="clearview-derain-unet.pth"
+)
+```
+
 ### Inference
 
+`clearview-inference` handles a single image, a directory of images, or a video — input/output type is matched automatically.
+
+**Single image**
+
 ```bash
-clearview-infer --image rainy.jpg --weights clearview-unet.pth --output clean.jpg
+clearview-inference --model unet --weights clearview-derain-unet.pth \
+  --input rainy.jpg --output derained.jpg
+```
+
+**Directory of images**
+
+```bash
+clearview-inference --model unet --weights clearview-derain-unet.pth \
+  --input-dir ./rainy_photos --output-dir ./derained_photos
+```
+
+**Video** (deraining runs frame by frame — there's no temporal-consistency term, so some frame-to-frame flicker is expected)
+
+```bash
+clearview-inference --model unet --weights clearview-derain-unet.pth \
+  --input rainy_clip.mp4 --output derained_clip.mp4
 ```
 
 ### Train
@@ -52,9 +90,6 @@ clearview-train \
 
 ✅ **Key insight**: L1 loss alone outperforms complex multi-loss combos.  
 ⚠️ **Limitations**: Trained on synthetic rain; slight texture smoothing.
-
-![Input vs Output](https://github.com/dronefreak/clearview/raw/main/assets/heavy_rain_input.jpg) →  
-![Derained](https://github.com/dronefreak/clearview/raw/main/assets/heavy_rain_output.jpg)
 
 ---
 

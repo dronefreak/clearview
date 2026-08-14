@@ -82,10 +82,19 @@ class DerainingModel:
                 checkpoint = torch.load(weights, map_location=device)
 
                 # Handle different checkpoint formats
-                if "model_state_dict" in checkpoint:
-                    model.load_state_dict(checkpoint["model_state_dict"])
-                else:
-                    model.load_state_dict(checkpoint)
+                state_dict = (
+                    checkpoint["model_state_dict"]
+                    if "model_state_dict" in checkpoint
+                    else checkpoint
+                )
+                # Strip torch.compile()'s "_orig_mod." prefix, in case this
+                # checkpoint was saved from a compiled model without being
+                # unwrapped first.
+                if all(k.startswith("_orig_mod.") for k in state_dict):
+                    state_dict = {
+                        k[len("_orig_mod.") :]: v for k, v in state_dict.items()
+                    }
+                model.load_state_dict(state_dict)
             else:
                 raise FileNotFoundError(f"Weights file not found: {weights}")
 

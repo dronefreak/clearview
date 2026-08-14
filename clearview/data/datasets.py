@@ -59,9 +59,12 @@ class ImagePairDataset(Dataset):
         self.transform = transform
         self.extensions = extensions
 
-        # Get image file lists
+        # Get image file lists. Scanned recursively (rglob) rather than a flat
+        # iterdir() so that a rainy_dir/clean_dir sharded into subfolders (e.g.
+        # to stay under a hosting platform's per-directory file-count limit) is
+        # found transparently, with no change needed for a plain flat directory.
         try:
-            rainy_entries = list(self.rainy_dir.iterdir())
+            rainy_entries = list(self.rainy_dir.rglob("*"))
         except FileNotFoundError as e:
             raise FileNotFoundError(
                 f"Rainy directory not found: {self.rainy_dir}"
@@ -72,7 +75,7 @@ class ImagePairDataset(Dataset):
             ) from e
 
         try:
-            clean_entries = list(self.clean_dir.iterdir())
+            clean_entries = list(self.clean_dir.rglob("*"))
         except FileNotFoundError as e:
             raise FileNotFoundError(
                 f"Clean directory not found: {self.clean_dir}"
@@ -395,9 +398,12 @@ class Rain1400Dataset(Dataset):
         self.transform = transform
         self.extensions = extensions
 
-        # Get image file lists
+        # Get image file lists. Scanned recursively (rglob) rather than a flat
+        # iterdir() so that a rainy_dir sharded into subfolders (e.g. to stay
+        # under a hosting platform's per-directory file-count limit) is found
+        # transparently, with no change needed for a plain flat directory.
         try:
-            rainy_entries = list(self.rainy_dir.iterdir())
+            rainy_entries = list(self.rainy_dir.rglob("*"))
         except FileNotFoundError as e:
             raise FileNotFoundError(
                 f"Rainy directory not found: {self.rainy_dir}"

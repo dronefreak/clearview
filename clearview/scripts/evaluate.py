@@ -226,8 +226,25 @@ def evaluate(
             rainy = batch["rainy"]
             clean = batch["clean"]
 
-        # Process
-        derained = model.process_batch(rainy)
+        # Process. Native-resolution evaluation sets can contain outlier
+        # images large enough to OOM the GPU even at batch size 1 (seen in
+        # practice on Rain13K's Test2800, DDN-Data, and RealRain-1k). Fall
+        # back to CPU for just that one sample rather than aborting the run.
+        try:
+            derained = model.process_batch(rainy)
+        except torch.OutOfMemoryError:
+            logger.warning(
+                f"CUDA OOM on sample {idx} (shape {tuple(rainy.shape)}); "
+                "retrying this sample on CPU"
+            )
+            torch.cuda.empty_cache()
+            original_device = model.device
+            model.to("cpu")
+            try:
+                derained = model.process_batch(rainy)
+            finally:
+                model.to(original_device)
+                torch.cuda.empty_cache()
 
         # Compute metrics
         batch_metrics = compute_metrics(

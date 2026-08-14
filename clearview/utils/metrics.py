@@ -5,12 +5,15 @@ image deraining and restoration quality, plus optional learned/no-reference
 metrics (LPIPS, BRISQUE) that depend on third-party packages.
 """
 
+import logging
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Union, cast
 
 import numpy as np
 import torch
 import torch.nn.functional as F
+
+logger = logging.getLogger(__name__)
 
 # All metric names implemented in this module (excluding 'fid', which scores
 # a *distribution* of images rather than a single pred/target pair and is
@@ -724,8 +727,21 @@ def compute_metrics(
                 raise TypeError("metric 'niqe' only supports torch.Tensor inputs")
 
             batch = pred if pred.dim() == 4 else pred.unsqueeze(0)
-            scores = [compute_niqe(batch[i], niqe_model) for i in range(batch.size(0))]
-            results["niqe"] = float(np.mean(scores))
+            # NIQE needs each of its two analysis scales to be >= patch_size
+            # (96px by default), i.e. the image itself must be >= ~192px in
+            # both dimensions. Images below that (small crops/thumbnails)
+            # raise ValueError from compute_niqe(); skip those individual
+            # images rather than letting one undersized image abort an
+            # entire evaluation run, matching fit_niqe_model()'s existing
+            # graceful-skip behavior for the same constraint.
+            scores = []
+            for i in range(batch.size(0)):
+                try:
+                    scores.append(compute_niqe(batch[i], niqe_model))
+                except ValueError as e:
+                    logger.warning(f"Skipping NIQE for one image: {e}")
+            if scores:
+                results["niqe"] = float(np.mean(scores))
         else:
             raise ValueError(f"Unknown metric: {metric}")
 

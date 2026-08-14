@@ -165,11 +165,15 @@ class Trainer:
         # Callbacks
         self.callbacks = CallbackList(callbacks or [])
 
-        # Set model/optimizer in callbacks that need it
+        # Set model/optimizer in callbacks that need it. Callbacks that
+        # checkpoint the model (e.g. ModelCheckpoint) must see raw_model, not
+        # self.model directly — otherwise, under torch.compile(), they save
+        # OptimizedModule's `_orig_mod.`-prefixed state_dict, which is not
+        # loadable by from_pretrained() without --compile.
         for callback in callbacks or []:
             if hasattr(callback, "set_model"):
                 try:
-                    callback.set_model(self.model)
+                    callback.set_model(self.raw_model)
                 except Exception as e:
                     logger.warning(
                         f"Failed to set model on {callback.__class__.__name__}: {e}"
@@ -421,17 +425,17 @@ class Trainer:
                 # Train
                 train_metrics = self.train_epoch(train_loader)
 
-                # Validate
+                # Validate. When validating with EMA, keep the shadow weights
+                # applied through the checkpoint callbacks below (not just
+                # validate_epoch) — otherwise a callback like ModelCheckpoint
+                # saves the raw (non-EMA) weights even though the val_psnr it
+                # is keying off of was computed on the EMA weights.
                 val_metrics = None
+                ema_backup = None
                 if val_loader is not None:
                     if self.ema is not None and self.validate_with_ema:
                         ema_backup = self.ema.apply_shadow(self.raw_model)
-                        try:
-                            val_metrics = self.validate_epoch(val_loader)
-                        finally:
-                            self.ema.restore(self.raw_model, ema_backup)
-                    else:
-                        val_metrics = self.validate_epoch(val_loader)
+                    val_metrics = self.validate_epoch(val_loader)
 
                 # Update history
                 self.history["train_loss"].append(train_metrics["loss"])
@@ -456,7 +460,11 @@ class Trainer:
                         logs[f"val_{metric}"] = val_metrics[metric]
 
                 # Callback
-                self.callbacks.on_epoch_end(epoch, logs)
+                try:
+                    self.callbacks.on_epoch_end(epoch, logs)
+                finally:
+                    if ema_backup is not None and self.ema is not None:
+                        self.ema.restore(self.raw_model, ema_backup)
 
                 # Check for early stopping
                 if self._check_early_stop():
