@@ -34,7 +34,7 @@
 
 ## 🚀 Quick Start
 
-### Try Online
+### Try on Hugging Face
 
 👉 [Live Demo on HuggingFace](https://huggingface.co/spaces/dronefreak/clearview-derain-demo)
 
@@ -157,10 +157,10 @@ blended average on its own:
 
 ## 📚 Supported Datasets
 
-- **Rain13K** (composite synthetic set; includes Rain100H/L, Test100, Test1200, Test2800): 13.7K train pairs
-- **DDN-Data / Rain1400**: 12.6K train / 1.4K test
-- **SPA-Data**: real-world, video-derived rain/clean pairs
-- **RealRain-1k-H/L**: real-world, heavy/light density tracks
+- **[Rain13K](https://huggingface.co/datasets/dronefreak/Rain13K)** (composite synthetic set; includes Rain100H/L, Test100, Test1200, Test2800): 13.7K train pairs
+- **[DDN-Data / Rain1400](https://huggingface.co/datasets/dronefreak/DDN-Data)**: 12.6K train / 1.4K test
+- **[SPA-Data](https://huggingface.co/datasets/dronefreak/SPA-Data)**: real-world, video-derived rain/clean pairs
+- **[RealRain-1k-H/L](https://huggingface.co/datasets/dronefreak/RealRain-1k)**: real-world, heavy/light density tracks
 - **Custom**: Organize as `train/{rainy_image,ground_truth}`, or combine any of the above via [`--mix-config`](configs/mix/)
 
 ---
