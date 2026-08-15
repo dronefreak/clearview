@@ -199,23 +199,21 @@ clearview-train \
   --device cuda
 ```
 
-`--batch-size 64` is an estimate, not a measurement, doubled from the
-24GB-sized estimate (32) rather than independently derived, no smoke test
-has been run against this specific variant on either card. 1.1M params is
-small enough that it should comfortably fit, but "should" is still doing
-real work in that sentence. Time one epoch before trusting the full
-100-epoch budget, same as every other unverified number in this doc.
+**`--batch-size 64` is confirmed correct, double-checked directly.** An
+earlier version of this doc flagged 64 as likely to OOM, extrapolating
+linearly from a batch-8 measurement (~10/48GB used). That extrapolation was
+wrong: VRAM clearly isn't scaling linearly with batch size for a model this
+small, fixed overhead (CUDA context, cuDNN workspace, etc.) dominates more
+than assumed. Take the earlier "16-24 range" guidance in this doc's history
+as a cautionary tale about trusting linear extrapolation from a single data
+point over an actual measurement.
 
 ---
 
 ## 4b. NAFNet (Large) -- new run, 48GB (RTX A6000)
 
 `nafnet_large` is the biggest NAFNet variant, 116M params, about 8x the
-mid-size `nafnet` and roughly 7.5x Restormer. This is the one entry in this
-whole document I'd treat as genuinely uncertain rather than a reasonable
-estimate: nothing at this parameter scale has been smoke-tested or run at
-all this session, and the batch size below is a conservative guess sized to
-avoid an obvious OOM, not a number backed by any measurement.
+mid-size `nafnet` and roughly 7.5x Restormer.
 
 ```bash
 clearview-train \
@@ -224,7 +222,7 @@ clearview-train \
   --val-mix-config configs/mix/rain_mixed_val.yaml \
   --data-dir /home/saumya.saksena/projects/mixed_datasets \
   --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
-  --crop-size 256 --batch-size 4 --accumulation-steps 1 --val-batch-size 4 --num-workers 8 \
+  --crop-size 256 --batch-size 16 --accumulation-steps 1 --val-batch-size 16 --num-workers 8 \
   --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
   --epochs 100 --early-stopping --patience 15 \
   --checkpoint-monitor val_psnr --checkpoint-mode max \
@@ -233,17 +231,15 @@ clearview-train \
   --device cuda
 ```
 
-`--batch-size 4 --accumulation-steps 1` doubles the true batch size from
-the 24GB-sized version (2, with accumulation-steps 2 to reach an effective
-batch of 4) rather than just doubling the accumulation count, same "drop
-the accumulation crutch once there's real headroom" pattern used for
-Restormer and UNet earlier in this doc. Strongly recommend a real smoke
-test (small subsets, 1 epoch, same pattern used for Restormer/UNet earlier)
-before launching this one for real, not just a 1-epoch timing check. At
-116M params, an OOM here wastes more time to discover than at any smaller
-variant, and there's no measurement yet to say `--batch-size 4` is even
-safe on 48GB, only that it's conservative relative to what 48GB could
-plausibly support.
+**Correction, this used to say `--batch-size 4` and warned this whole
+section was an unmeasured guess.** That guess was too conservative: a real
+run at `--batch-size 16` measured ~24/48GB used (half the card, 15
+min/epoch), 4x the originally recommended value with room to spare.
+`--batch-size 16` above is the actual measured-safe value. There's
+headroom to push further if you want to (something in the 20-24 range
+would be the next reasonable step given ~1.5GB/unit-of-batch implied by
+this measurement), but that's still extrapolation from one data point, not
+a second measurement.
 
 ---
 

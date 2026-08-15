@@ -155,7 +155,7 @@ blended average on its own:
 | RealRain-1k-L [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
 | AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
 
-All models trained under the identical mixed-domain recipe; only batch size/accumulation steps vary per architecture size. See [`configs/mix/trainer.md`](configs/mix/trainer.md) for the exact commands, including real measured (not estimated) batch sizes for each NAFNet variant.
+All models trained under the identical mixed-domain recipe; only batch size/accumulation steps vary per architecture size.
 
 ---
 
