@@ -1,0 +1,37 @@
+# Blended validation set for --val-mix-config: checkpoint selection based on
+# "doesn't fail badly anywhere" rather than one dataset's specific quirks.
+#
+# 4 sources, capped/sized so no single one dominates the averaged metric:
+# SPA-Data val is capped from 1,000 down to 150 (it would otherwise be ~75%
+# of the blend on its own); RealRain-1k-H/L validation (112 each) and
+# Rain100L test (100, as a synthetic sanity anchor) are used in full. Result:
+# roughly 32/24/24/21% split across the four sources instead of one source
+# swamping the other three.
+#
+# Uses exactly the sources already in mixed_datasets.zip -- no extra data
+# transfer needed beyond what §1 of trainer.md already unzips.
+#
+# Paths assume the unzipped contents of mixed_datasets.zip live at
+# /home/saumya.saksena/projects/mixed_datasets -- update `data_dir` below if
+# unzipped elsewhere.
+
+sources:
+  - dataset_type: spa-data
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/spa_data
+    split: val
+    max_samples: 150
+
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_h/validation
+    rainy_dir: input
+    clean_dir: target
+
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_l/validation
+    rainy_dir: input
+    clean_dir: target
+
+  - dataset_type: pair
+    data_dir: /home/saumya.saksena/projects/mixed_datasets/rain100l_test
+    rainy_dir: input
+    clean_dir: target
