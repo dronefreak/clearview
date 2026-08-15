@@ -143,6 +143,8 @@ blended average on its own:
 
 Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
+In our own spot checks (both `net_g_real` and `net_g_best`), its visible effect leaned much closer to dehazing/contrast correction than streak removal, on images with a haze or veiling component it cleaned up dramatically, but on images with clear rain streaks and no haze, including a genuine rain photograph, streaks were left largely untouched. Results can vary a lot by input, treat it as a reference point rather than a strong deraining baseline.
+
 ### Benchmark Results (PSNR / SSIM)
 
 | Test Set                                 | Domain                | Restormer | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid) | NAFNet (Large) | Histoformer |
@@ -178,6 +180,7 @@ All ClearView models trained under the identical mixed-domain recipe, only batch
 - [x] Add UResNet model support
 - [x] Add Restormer model support
 - [x] Add NAFNet model support
+- [x] Add Histormer model support (inference-only)
 - [ ] Temporal consistency for video
 - [ ] Mobile deployment (ONNX/TensorRT)
 - [ ] Snow/fog/haze removal
