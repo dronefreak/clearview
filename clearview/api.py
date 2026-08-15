@@ -81,12 +81,16 @@ class DerainingModel:
             if weights.exists():
                 checkpoint = torch.load(weights, map_location=device)
 
-                # Handle different checkpoint formats
-                state_dict = (
-                    checkpoint["model_state_dict"]
-                    if "model_state_dict" in checkpoint
-                    else checkpoint
-                )
+                # Handle different checkpoint formats. "params" is the
+                # official Histoformer checkpoint's key, not a ClearView
+                # convention, kept here since ClearView loads its
+                # pretrained weights directly rather than re-saving them.
+                if "model_state_dict" in checkpoint:
+                    state_dict = checkpoint["model_state_dict"]
+                elif "params" in checkpoint:
+                    state_dict = checkpoint["params"]
+                else:
+                    state_dict = checkpoint
                 # Strip torch.compile()'s "_orig_mod." prefix, in case this
                 # checkpoint was saved from a compiled model without being
                 # unwrapped first.

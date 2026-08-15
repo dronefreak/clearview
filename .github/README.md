@@ -132,30 +132,33 @@ blended average on its own:
 
 ### Models
 
-| Model          | Params | Training Data            | Validation Checkpoint                           | HF Model Card  |
-| -------------- | ------ | ------------------------ | ----------------------------------------------- | -------------- |
-| Restormer      | 15.3M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| UNet (Vanilla) | 21.5M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| NAFNet (Small) | 1.1M   | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| NAFNet (Mid)   | 14.3M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| NAFNet (Large) | 116M   | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| Model                          | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                           |
+| ------------------------------ | ------ | ---------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Restormer                      | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| UNet (Vanilla)                 | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Small)                 | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Mid)                   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Large)                 | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| Histoformer [[8]](#references) | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer) |
+
+Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
 ### Benchmark Results (PSNR / SSIM)
 
-| Test Set                                 | Domain                | Restormer | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid) | NAFNet (Large) |
-| ---------------------------------------- | --------------------- | --------- | -------------- | -------------- | ------------ | -------------- |
-| Rain100L [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| Rain100H [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| Test100 [[2]](#references)               | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| Test1200 [[3]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| Test2800 [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| DDN-Data [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| SPA-Data [[5]](#references)              | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| RealRain-1k-H [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| RealRain-1k-L [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
-| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| Test Set                                 | Domain                | Restormer | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid) | NAFNet (Large) | Histoformer |
+| ---------------------------------------- | --------------------- | --------- | -------------- | -------------- | ------------ | -------------- | ----------- |
+| Rain100L [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| Rain100H [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| Test100 [[2]](#references)               | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| Test1200 [[3]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| Test2800 [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| DDN-Data [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| SPA-Data [[5]](#references)              | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| RealRain-1k-H [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| RealRain-1k-L [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
 
-All models trained under the identical mixed-domain recipe; only batch size/accumulation steps vary per architecture size.
+All ClearView models trained under the identical mixed-domain recipe, only batch size/accumulation steps vary per architecture size. Histoformer is included as an external, inference-only reference point, not trained under this recipe.
 
 ---
 
@@ -211,5 +214,6 @@ Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 5. Wang et al., _Spatial Attentive Single-Image Deraining with a High Quality Real Rain Dataset_, CVPR 2019 (SPA-Data).
 6. Li et al., _RealRain-1k: A Large-Scale Dataset for Real-World Single Image Deraining_, arXiv:2206.05514, 2022.
 7. Li et al., _Heavy Rain Image Restoration: Integrating Physics Model and Conditional Adversarial Learning_, CVPR 2019 (AllWeather rain+fog / Outdoor-Rain).
+8. Sun, Ren, Gao, Wang & Cao, _Restoring Images in Adverse Weather Conditions via Histogram Transformer_, ECCV 2024, [arXiv:2407.10172](https://arxiv.org/abs/2407.10172) (Histoformer, inference-only baseline).
 
 ---

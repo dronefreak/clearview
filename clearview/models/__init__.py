@@ -8,6 +8,7 @@ from typing import Any, Callable, Dict, List, Type
 
 from clearview.models.attention_unet import AttentionUNet
 from clearview.models.base import BaseModel
+from clearview.models.histoformer import Histoformer
 from clearview.models.nafnet import NAFNet, NAFNetLarge, NAFNetSmall
 from clearview.models.resnet_unet import ResNetUNet, create_resnet_unet
 from clearview.models.restormer import Restormer, RestormerLarge, RestormerSmall
@@ -30,6 +31,7 @@ _MODEL_REGISTRY: Dict[str, Callable[..., BaseModel]] = {
     "restormer": lambda **kwargs: Restormer(**kwargs),
     "restormer_small": lambda **kwargs: RestormerSmall(**kwargs),
     "restormer_large": lambda **kwargs: RestormerLarge(**kwargs),
+    "histoformer": lambda **kwargs: Histoformer(**kwargs),
 }
 
 
@@ -106,6 +108,7 @@ __all__ = [
     "Restormer",
     "RestormerSmall",
     "RestormerLarge",
+    "Histoformer",
     # Factory functions
     "register_model",
     "get_model",
