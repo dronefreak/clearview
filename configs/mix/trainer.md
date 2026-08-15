@@ -2,10 +2,18 @@
 
 Commands for unzipping `mixed_datasets.zip` on the server and launching the
 mixed-data training run across the three architectures we're comparing with
-the same methodology: same 5-source mix (`configs/mix/rain_mixed_synthetic_real.yaml`),
-same mild real-data oversampling (`--mix-sampler`), same Charbonnier-only
-loss, same crop size/schedule/EMA/compile settings. Only `--batch-size`/
-`--accumulation-steps` vary per architecture, sized for a 24GB card (RTX A5000).
+the same methodology: same 5-source training mix (`configs/mix/rain_mixed_synthetic_real.yaml`),
+same mild real-data oversampling (`--mix-sampler`), same blended 4-source
+validation set for checkpoint selection (`configs/mix/rain_mixed_val.yaml`,
+via `--val-mix-config`), same Charbonnier-only loss, same crop
+size/schedule/EMA/compile settings. Only `--batch-size`/`--accumulation-steps`
+vary per architecture, sized for a 24GB card (RTX A5000).
+
+`--val-mix-config` blends SPA-Data val (capped to 150 of its 1,000 pairs),
+RealRain-1k-H/L validation (112 each), and Rain100L (100) into one
+checkpoint-selection metric — so "best" means "doesn't fail badly anywhere,"
+not "maxes out SPA-Data specifically." Smoke-tested end-to-end (real data,
+real `Trainer`, real GPU) before this doc was updated to use it.
 
 **Before running any of these for real**: time one epoch first (see the note
 at the bottom) rather than trusting the batch sizes below blind — they're
@@ -27,18 +35,45 @@ This expects `mixed_datasets.zip` to already be at
 — the exact layout `configs/mix/rain_mixed_synthetic_real.yaml` expects.
 
 Also make sure the `clearview` checkout on the server has the `--mix-config`/
-`--mix-sampler` flags (this branch's code) — they don't exist in any
-published version yet.
+`--mix-sampler`/`--val-mix-config` flags (this branch's code) — they don't
+exist in any published version yet.
 
 ---
 
-## 2. Restormer
+## 2. Restormer -- resuming with `--val-mix-config`
+
+This run was already going (SPA-Data-only val, epoch 14 at 40.3 PSNR when
+last checked). Switching to the blended val requires a resume, not a
+relaunch, to keep the epoch count/optimizer/scheduler/EMA state continuous.
+
+**Stop it gracefully first** -- Ctrl+C in the terminal it's running in, or
+`kill -SIGINT <pid>` if it's backgrounded (`kill -9` will _not_ save a
+resumable checkpoint, don't use it here). This triggers the
+`except KeyboardInterrupt` handler in `train.py`, which saves
+`checkpoints/interrupted.pth` with full state (model, optimizer, epoch, EMA)
+-- unlike `checkpoints/best_val_psnr.pth`, which is just the best single
+epoch snapshot, `interrupted.pth` is what actually resumes cleanly.
+
+**Back up the current best checkpoint before resuming** -- once training
+starts using the new blended metric, `ModelCheckpoint`'s "best so far"
+tracking resets to `-inf` (it's per-process state, not saved/restored by
+`--resume`), so the very next epoch will unconditionally overwrite
+`best_val_psnr.pth`, even before the blended metric has actually beaten
+anything. If you want to keep the SPA-Data-only-optimized snapshot as a
+reference point, copy it aside first:
+
+```bash
+cp ./runs/rain_mixed_restormer/checkpoints/best_val_psnr.pth \
+   ./runs/rain_mixed_restormer/checkpoints/best_val_psnr_spa_only.pth
+```
 
 ```bash
 clearview-train \
   --model restormer \
+  --resume ./runs/rain_mixed_restormer/checkpoints/interrupted.pth \
   --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
-  --dataset-type spa-data --data-dir /home/saumya.saksena/projects/mixed_datasets/spa_data --val-split val \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /home/saumya.saksena/projects/mixed_datasets \
   --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
   --crop-size 256 --batch-size 4 --accumulation-steps 1 --val-batch-size 4 --num-workers 8 \
   --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
@@ -51,21 +86,29 @@ clearview-train \
 
 `--batch-size 4 --accumulation-steps 1` (true batch 4, no accumulation crutch)
 — the 24GB A5000 should comfortably beat the 12GB card's batch=2+accum=2
-setup. 15.3M params.
+setup. 15.3M params. `EarlyStopping`'s patience counter also resets fresh on
+resume (same reason as `ModelCheckpoint` above) -- it gets a full new
+15-epoch budget from wherever this resumes, not the leftover count from the
+SPA-only run.
 
 ---
 
-## 3. UNet
+## 3. UNet -- fresh run, 300 epochs
+
+The single-dataset UNet was still visibly converging at 100 epochs (38 PSNR
+on SPA-Data val, not yet plateaued), so this one launches from scratch with
+a longer budget rather than resuming anything.
 
 ```bash
 clearview-train \
   --model unet \
   --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
-  --dataset-type spa-data --data-dir /home/saumya.saksena/projects/mixed_datasets/spa_data --val-split val \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /home/saumya.saksena/projects/mixed_datasets \
   --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
   --crop-size 256 --batch-size 24 --val-batch-size 24 --num-workers 8 \
   --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
-  --epochs 100 --early-stopping --patience 15 \
+  --epochs 300 --early-stopping --patience 15 \
   --checkpoint-monitor val_psnr --checkpoint-mode max \
   --mixed-precision --ema --ema-decay 0.999 --compile \
   --output-dir ./runs/rain_mixed_unet \
@@ -76,6 +119,8 @@ clearview-train \
 recipe already ran successfully on a 12GB card (21.5M params, but plain
 convolutions are far cheaper than Restormer's attention at the same param
 count) — the A5000 has ample headroom here, this one is low-risk.
+`--patience 15` still applies against the full 300-epoch budget, so this
+stops itself if it plateaus well before 300 -- it's a ceiling, not a target.
 
 Note: this uses `use_transpose_conv=False` (UNet's current default,
 bilinear upsampling) since it's a fresh training run, not loading the older
@@ -83,13 +128,33 @@ bilinear upsampling) since it's a fresh training run, not loading the older
 
 ---
 
-## 4. NAFNet
+## 4. NAFNet -- resuming with `--val-mix-config`
+
+Same situation as Restormer: already running (SPA-Data-only val, epoch 49 at
+41.6 PSNR when last checked, ~10 min/epoch). `--batch-size 6` turned out fine
+in practice over those 49 real epochs -- the earlier "not smoke-tested"
+caveat no longer applies.
+
+**Stop it gracefully first** (Ctrl+C / `kill -SIGINT <pid>`, not `kill -9`)
+so `checkpoints/interrupted.pth` gets saved with full resumable state --
+same reasoning as Restormer above.
+
+**Back up the current best checkpoint before resuming**, for the same
+reason as Restormer (`ModelCheckpoint`'s "best so far" resets to `-inf` on
+resume, so the next epoch unconditionally overwrites `best_val_psnr.pth`):
+
+```bash
+cp ./runs/rain_mixed_nafnet/checkpoints/best_val_psnr.pth \
+   ./runs/rain_mixed_nafnet/checkpoints/best_val_psnr_spa_only.pth
+```
 
 ```bash
 clearview-train \
   --model nafnet \
+  --resume ./runs/rain_mixed_nafnet/checkpoints/interrupted.pth \
   --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
-  --dataset-type spa-data --data-dir /home/saumya.saksena/projects/mixed_datasets/spa_data --val-split val \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /home/saumya.saksena/projects/mixed_datasets \
   --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
   --crop-size 256 --batch-size 6 --accumulation-steps 1 --val-batch-size 6 --num-workers 8 \
   --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
@@ -102,13 +167,8 @@ clearview-train \
 
 `--model nafnet` is the mid-size variant (14.3M params, comparable to
 Restormer's 15.3M) — not `nafnet_small` (1.1M) or `nafnet_large` (116M).
-**Caveat, unlike the other two: this exact pipeline (MixedDataset +
-Charbonnier + this crop/schedule) has not been smoke-tested with NAFNet at
-all this session** — only Restormer and a small UNet were. `--batch-size 6`
-is an estimate based on NAFNet's generally lower memory footprint than
-transformer-attention models at a similar param count, not a measurement.
-I'd run the same kind of 1-epoch smoke test we did for Restormer/UNet
-before trusting this one on the full 100 epochs.
+`EarlyStopping`'s patience counter resets fresh on resume too, same as
+Restormer -- full new 15-epoch budget from wherever this picks back up.
 
 ---
 
@@ -150,6 +210,16 @@ to transfer to the server alongside it.
 
 ### 5a. Available now (already unzipped on the server)
 
+**Note on the checkpoint metric**: since training now uses `--val-mix-config`
+(§2-4), the number that actually picked "best" is a _blended_ PSNR across
+SPA-Data val (capped 150) + RealRain-1k-H/L validation + Rain100L -- there's
+no single `clearview-evaluate` call that reproduces that exact blended number
+(evaluate.py doesn't support multi-source blending the way training now
+does). The four commands below reproduce the _per-source_ numbers that went
+into it; averaging them yourself will be close but not identical, since the
+training-time blend capped SPA-Data to 150 of its 1,000 val pairs and these
+run against the full 1,000.
+
 ```bash
 for MODEL in restormer unet nafnet; do
   case $MODEL in
@@ -159,15 +229,15 @@ for MODEL in restormer unet nafnet; do
   esac
   OUT=./runs/rain_mixed_${MODEL}/eval
 
-  # Rain100L (synthetic sanity check)
+  # Rain100L (synthetic sanity check, and one of the 4 sources in the
+  # blended checkpoint metric)
   clearview-evaluate --model $MODEL --weights $WEIGHTS \
     --data-dir /home/saumya.saksena/projects/mixed_datasets/rain100l_test \
     --dataset-type pair --rainy-dir input --clean-dir target \
     --output-dir $OUT/Rain100L --device cuda
 
-  # SPA-Data val (this is the checkpoint-selection metric itself, so this
-  # number should roughly match what training already logged -- run it
-  # mainly as a from-fresh-inference sanity check, not new information)
+  # SPA-Data val, full 1,000 pairs (the blended checkpoint metric only used
+  # 150 of these -- see the note above)
   clearview-evaluate --model $MODEL --weights $WEIGHTS \
     --data-dir /home/saumya.saksena/projects/mixed_datasets/spa_data/val \
     --dataset-type spa-data \

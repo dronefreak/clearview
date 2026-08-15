@@ -1,7 +1,7 @@
 """Tests for the training script's --mix-config support.
 
 These tests exercise ``_load_mix_config()``, ``_build_dataset()``,
-``_build_mixed_train_dataset()``, and ``setup_data()``'s mix-config branch
+``_build_mixed_dataset()``, and ``setup_data()``'s mix-config branch
 directly, without invoking the full CLI or training loop.
 """
 
@@ -17,7 +17,7 @@ from PIL import Image
 from clearview.data import ImagePairDataset, MixedDataset
 from clearview.scripts.train import (
     _build_dataset,
-    _build_mixed_train_dataset,
+    _build_mixed_dataset,
     _load_mix_config,
     setup_data,
 )
@@ -125,8 +125,8 @@ class TestBuildDataset:
         assert len(dataset) == 2
 
 
-class TestBuildMixedTrainDataset:
-    """Tests for _build_mixed_train_dataset()."""
+class TestBuildMixedDataset:
+    """Tests for _build_mixed_dataset()."""
 
     def test_combines_sources_with_configured_weights(self, tmp_path: Path) -> None:
         """Test that sources are combined into a MixedDataset with the
@@ -158,7 +158,7 @@ class TestBuildMixedTrainDataset:
             )
         )
 
-        mixed = _build_mixed_train_dataset(str(config_path), None)
+        mixed = _build_mixed_dataset(str(config_path), None)
 
         assert isinstance(mixed, MixedDataset)
         assert len(mixed) == 8
@@ -184,9 +184,67 @@ class TestBuildMixedTrainDataset:
             )
         )
 
-        mixed = _build_mixed_train_dataset(str(config_path), None)
+        mixed = _build_mixed_dataset(str(config_path), None)
 
         assert mixed.source_weights == [1.0]
+
+    def test_max_samples_caps_a_source(self, tmp_path: Path) -> None:
+        """Test that 'max_samples' truncates a source before concatenation,
+        e.g. so one large validation source can't dominate a blended metric."""
+        big = _make_pair_source(tmp_path / "big", 10)
+        small = _make_pair_source(tmp_path / "small", 3)
+
+        config_path = tmp_path / "mix.yaml"
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "sources": [
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(big),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                            "max_samples": 4,
+                        },
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(small),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                    ]
+                }
+            )
+        )
+
+        mixed = _build_mixed_dataset(str(config_path), None)
+
+        assert len(mixed) == 7  # 4 (capped) + 3, not 10 + 3
+
+    def test_max_samples_larger_than_source_is_a_noop(self, tmp_path: Path) -> None:
+        """Test that a max_samples larger than the source size doesn't error
+        or truncate."""
+        source_dir = _make_pair_source(tmp_path / "a", 3)
+        config_path = tmp_path / "mix.yaml"
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "sources": [
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(source_dir),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                            "max_samples": 100,
+                        }
+                    ]
+                }
+            )
+        )
+
+        mixed = _build_mixed_dataset(str(config_path), None)
+
+        assert len(mixed) == 3
 
 
 def _make_data_args(**overrides: Any) -> argparse.Namespace:
@@ -202,6 +260,7 @@ def _make_data_args(**overrides: Any) -> argparse.Namespace:
         "val_split": "val",
         "mix_config": None,
         "mix_sampler": False,
+        "val_mix_config": None,
         "crop_size": 32,
         "flip_prob": 0.5,
         "no_rotation": True,
@@ -311,3 +370,98 @@ class TestSetupDataMixConfig:
         assert train_loader.sampler is None or not isinstance(
             train_loader.sampler, torch.utils.data.WeightedRandomSampler
         )
+
+
+class TestSetupDataValMixConfig:
+    """Tests for setup_data()'s --val-mix-config branch."""
+
+    def test_val_mix_config_builds_combined_val_loader(self, tmp_path: Path) -> None:
+        """Test that --val-mix-config blends multiple validation sources,
+        independently of whether --mix-config is used for training."""
+        train_dir = _make_pair_source(tmp_path / "train", 3)
+        val_a = _make_pair_source(tmp_path / "val_a", 5)
+        val_b = _make_pair_source(tmp_path / "val_b", 2)
+
+        val_config_path = tmp_path / "val_mix.yaml"
+        val_config_path.write_text(
+            yaml.dump(
+                {
+                    "sources": [
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(val_a),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(val_b),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                    ]
+                }
+            )
+        )
+
+        args = _make_data_args(
+            data_dir=str(train_dir),
+            train_rainy="input",
+            train_clean="target",
+            val_mix_config=str(val_config_path),
+        )
+        train_loader, val_loader = setup_data(args)
+
+        assert len(train_loader.dataset) == 3  # unaffected, from --data-dir
+        assert len(val_loader.dataset) == 7  # 5 + 2, blended
+
+    def test_val_mix_config_max_samples_balances_a_dominant_source(
+        self, tmp_path: Path
+    ) -> None:
+        """Test the actual motivating case: a large val source capped via
+        max_samples so it doesn't dominate a blended metric."""
+        train_dir = _make_pair_source(tmp_path / "train", 2)
+        dominant = _make_pair_source(tmp_path / "dominant", 100)
+        small_a = _make_pair_source(tmp_path / "small_a", 5)
+        small_b = _make_pair_source(tmp_path / "small_b", 5)
+
+        val_config_path = tmp_path / "val_mix.yaml"
+        val_config_path.write_text(
+            yaml.dump(
+                {
+                    "sources": [
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(dominant),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                            "max_samples": 10,
+                        },
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(small_a),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                        {
+                            "dataset_type": "pair",
+                            "data_dir": str(small_b),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                    ]
+                }
+            )
+        )
+
+        args = _make_data_args(
+            data_dir=str(train_dir),
+            train_rainy="input",
+            train_clean="target",
+            val_mix_config=str(val_config_path),
+        )
+        _, val_loader = setup_data(args)
+
+        # Without max_samples this would be 100 + 5 + 5 = 110, dominated by
+        # `dominant`. Capped, it's a much more balanced 10 + 5 + 5 = 20.
+        assert len(val_loader.dataset) == 20

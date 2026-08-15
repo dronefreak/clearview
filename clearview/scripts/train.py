@@ -17,7 +17,7 @@ from torch.optim.lr_scheduler import (
     ReduceLROnPlateau,
     StepLR,
 )
-from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 
 from clearview.data import (
     ImagePairDataset,
@@ -116,8 +116,8 @@ def parse_args() -> argparse.Namespace:
         "datasets), each with its own dataset_type/data_dir/weight. When "
         "given, this replaces how the *training* dataset is built; "
         "--data-dir/--dataset-type/--val-split etc. are still used as-is "
-        "for the *validation* dataset (typically a single, real-world "
-        "source). See clearview/scripts/README.md for the file format.",
+        "for the *validation* dataset unless --val-mix-config is also "
+        "given. See configs/mix/ for example files.",
     )
     data_group.add_argument(
         "--mix-sampler",
@@ -126,6 +126,20 @@ def parse_args() -> argparse.Namespace:
         "WeightedRandomSampler using each source's configured weight "
         "(oversampling small sources), instead of a single shuffled pass "
         "over the concatenated data.",
+    )
+    data_group.add_argument(
+        "--val-mix-config",
+        type=str,
+        default=None,
+        help="Path to a YAML file (same format as --mix-config) listing "
+        "multiple validation sources to blend into one checkpoint-selection "
+        "metric, so 'best' isn't picked off a single dataset's quirks. "
+        "Always a single deterministic pass (no oversampling/weighting, "
+        "unlike --mix-config) -- use each source's 'max_samples' to stop a "
+        "large source from dominating the blended average. When given, "
+        "this replaces --data-dir/--dataset-type/--val-split for the "
+        "validation dataset; it's independent of --mix-config, so you can "
+        "mix training sources, validation sources, both, or neither.",
     )
 
     # Model arguments
@@ -482,7 +496,7 @@ def _build_dataset(
 
 
 def _load_mix_config(path: str) -> List[Dict[str, Any]]:
-    """Load and validate a --mix-config YAML file.
+    """Load and validate a --mix-config/--val-mix-config YAML file.
 
     Expected format::
 
@@ -492,7 +506,18 @@ def _load_mix_config(path: str) -> List[Dict[str, Any]]:
             rainy_dir: input         # pair/rain1400 only
             clean_dir: target        # pair/rain1400 only
             split: train             # spa-data only
-            weight: 1.0              # optional, default 1.0
+            weight: 1.0              # optional, default 1.0. Only meaningful
+                                      # for --mix-config + --mix-sampler
+                                      # (oversampling); ignored for
+                                      # --val-mix-config, which is always a
+                                      # single deterministic pass.
+            max_samples: 150         # optional. Truncates this source to its
+                                      # first N pairs -- mainly useful on the
+                                      # validation side, to stop one large
+                                      # source (e.g. a 1,000-pair val split)
+                                      # from dominating a blended metric
+                                      # averaged over a handful of much
+                                      # smaller sources.
 
     Returns:
         The list of source dicts under the top-level "sources" key.
@@ -507,18 +532,25 @@ def _load_mix_config(path: str) -> List[Dict[str, Any]]:
     sources = config.get("sources") if isinstance(config, dict) else None
     if not sources:
         raise ValueError(
-            f"--mix-config file {path!r} must contain a top-level "
+            f"Mix-config file {path!r} must contain a top-level "
             "'sources' list with at least one entry"
         )
     for i, source in enumerate(sources):
         if "data_dir" not in source:
-            raise ValueError(f"--mix-config source #{i} is missing 'data_dir'")
+            raise ValueError(f"Mix-config source #{i} is missing 'data_dir'")
 
     return cast(List[Dict[str, Any]], sources)
 
 
-def _build_mixed_train_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
-    """Build a MixedDataset from a --mix-config YAML file."""
+def _build_mixed_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
+    """Build a MixedDataset from a --mix-config/--val-mix-config YAML file.
+
+    Used for both the training side (--mix-config, optionally with
+    --mix-sampler for weighted oversampling) and the validation side
+    (--val-mix-config, always a single unweighted deterministic pass) --
+    the dataset-building logic is identical either way, only what the
+    caller does with the result (attach a sampler or not) differs.
+    """
     sources = _load_mix_config(mix_config_path)
 
     datasets = []
@@ -532,12 +564,18 @@ def _build_mixed_train_dataset(mix_config_path: str, transform: Any) -> MixedDat
             clean_dir=source.get("clean_dir"),
             split=source.get("split"),
         )
+
+        max_samples = source.get("max_samples")
+        if max_samples is not None and max_samples < len(dataset):
+            dataset = Subset(dataset, list(range(max_samples)))
+
         datasets.append(dataset)
         weights.append(float(source.get("weight", 1.0)))
         logger.info(
             f"  Mix source: {source['data_dir']} "
             f"(type={source.get('dataset_type', 'pair')}, "
             f"weight={weights[-1]}) -> {len(dataset)} pairs"
+            + (f" (capped from more, max_samples={max_samples})" if max_samples else "")
         )
 
     return MixedDataset(datasets, weights=weights)
@@ -546,6 +584,11 @@ def _build_mixed_train_dataset(mix_config_path: str, transform: Any) -> MixedDat
 def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     """Setup data loaders."""
     data_dir = Path(args.data_dir)
+    if args.mix_config is not None and args.val_mix_config is not None:
+        logger.info(
+            "Both --mix-config and --val-mix-config given: "
+            "--data-dir/--dataset-type are unused."
+        )
 
     # Training transforms
     train_transform = get_train_transforms(
@@ -562,9 +605,7 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     train_sampler: Optional[WeightedRandomSampler] = None
     if args.mix_config is not None:
         logger.info(f"Building mixed training dataset from {args.mix_config}")
-        train_dataset: Dataset = _build_mixed_train_dataset(
-            args.mix_config, train_transform
-        )
+        train_dataset: Dataset = _build_mixed_dataset(args.mix_config, train_transform)
         if args.mix_sampler:
             train_sampler = WeightedRandomSampler(
                 cast(MixedDataset, train_dataset).sample_weights(),
@@ -581,17 +622,22 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
             split=args.train_split,
         )
 
-    # Validation dataset always comes from --data-dir/--dataset-type, even
-    # when --mix-config is used for training (typically a single,
-    # real-world source you want to monitor generalization against).
-    val_dataset = _build_dataset(
-        args.dataset_type,
-        data_dir,
-        val_transform,
-        rainy_dir=args.val_rainy,
-        clean_dir=args.val_clean,
-        split=args.val_split,
-    )
+    # Validation dataset: either a single source (default, from
+    # --data-dir/--dataset-type) or a blended MixedDataset combining several
+    # validation sources (--val-mix-config) -- a single deterministic pass
+    # over the concatenation, no sampler/oversampling involved.
+    if args.val_mix_config is not None:
+        logger.info(f"Building mixed validation dataset from {args.val_mix_config}")
+        val_dataset = _build_mixed_dataset(args.val_mix_config, val_transform)
+    else:
+        val_dataset = _build_dataset(
+            args.dataset_type,
+            data_dir,
+            val_transform,
+            rainy_dir=args.val_rainy,
+            clean_dir=args.val_clean,
+            split=args.val_split,
+        )
 
     logger.info(f"Training samples: {len(train_dataset)}")
     logger.info(f"Validation samples: {len(val_dataset)}")
