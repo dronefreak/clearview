@@ -132,14 +132,14 @@ blended average on its own:
 
 ### Models
 
-| Model                          | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                           |
-| ------------------------------ | ------ | ---------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
-| Restormer                      | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| UNet (Vanilla)                 | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Small)                 | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Mid)                   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Large)                 | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| Histoformer [[8]](#references) | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer) |
+| Model                              | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                           |
+| ---------------------------------- | ------ | ---------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| Restormer [[9]](#references)       | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| UNet (Vanilla) [[10]](#references) | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Small) [[11]](#references) | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Mid) [[11]](#references)   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| NAFNet (Large) [[11]](#references) | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
+| Histoformer [[8]](#references)     | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer) |
 
 Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
@@ -218,5 +218,8 @@ Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 6. Li et al., _RealRain-1k: A Large-Scale Dataset for Real-World Single Image Deraining_, arXiv:2206.05514, 2022.
 7. Li et al., _Heavy Rain Image Restoration: Integrating Physics Model and Conditional Adversarial Learning_, CVPR 2019 (AllWeather rain+fog / Outdoor-Rain).
 8. Sun, Ren, Gao, Wang & Cao, _Restoring Images in Adverse Weather Conditions via Histogram Transformer_, ECCV 2024, [arXiv:2407.10172](https://arxiv.org/abs/2407.10172) (Histoformer, inference-only baseline).
+9. Zamir et al., _Restormer: Efficient Transformer for High-Resolution Image Restoration_, CVPR 2022, [arXiv:2111.09881](https://arxiv.org/abs/2111.09881).
+10. Ronneberger, Fischer & Brox, _U-Net: Convolutional Networks for Biomedical Image Segmentation_, MICCAI 2015, [arXiv:1505.04597](https://arxiv.org/abs/1505.04597).
+11. Chen, Chu, Zhang & Sun, _Simple Baselines for Image Restoration_, ECCV 2022, [arXiv:2204.04676](https://arxiv.org/abs/2204.04676) (NAFNet).
 
 ---
