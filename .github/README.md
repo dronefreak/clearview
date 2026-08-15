@@ -153,9 +153,6 @@ blended average on its own:
 | RealRain-1k-L [[6]](#references)         | Real-world            | _pending_         | _pending_             | _pending_      |
 | AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_         | _pending_             | _pending_      |
 
-Full eval sweep commands (all test sets, all three models):
-[`configs/mix/trainer.md`](configs/mix/trainer.md).
-
 ---
 
 ## 📚 Supported Datasets
