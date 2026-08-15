@@ -11,12 +11,12 @@ vary per architecture, sized for a 24GB card (RTX A5000).
 
 `--val-mix-config` blends SPA-Data val (capped to 150 of its 1,000 pairs),
 RealRain-1k-H/L validation (112 each), and Rain100L (100) into one
-checkpoint-selection metric — so "best" means "doesn't fail badly anywhere,"
+checkpoint-selection metric, so "best" means "doesn't fail badly anywhere,"
 not "maxes out SPA-Data specifically." Smoke-tested end-to-end (real data,
 real `Trainer`, real GPU) before this doc was updated to use it.
 
 **Before running any of these for real**: time one epoch first (see the note
-at the bottom) rather than trusting the batch sizes below blind — they're
+at the bottom) rather than trusting the batch sizes below blind, they're
 sized from a Restormer memory measurement at a smaller crop, extrapolated,
 not independently verified on this exact hardware.
 
@@ -32,10 +32,10 @@ unzip mixed_datasets.zip -d mixed_datasets
 This expects `mixed_datasets.zip` to already be at
 `/home/saumya.saksena/projects/mixed_datasets.zip`, and unpacks to
 `/home/saumya.saksena/projects/mixed_datasets/{rain13k,ddn_data,spa_data,realrain1k_h,realrain1k_l}`
-— the exact layout `configs/mix/rain_mixed_synthetic_real.yaml` expects.
+matching the exact layout `configs/mix/rain_mixed_synthetic_real.yaml` expects.
 
 Also make sure the `clearview` checkout on the server has the `--mix-config`/
-`--mix-sampler`/`--val-mix-config` flags (this branch's code) — they don't
+`--mix-sampler`/`--val-mix-config` flags (this branch's code), they don't
 exist in any published version yet.
 
 ---
@@ -84,8 +84,8 @@ clearview-train \
   --device cuda
 ```
 
-`--batch-size 4 --accumulation-steps 1` (true batch 4, no accumulation crutch)
-— the 24GB A5000 should comfortably beat the 12GB card's batch=2+accum=2
+`--batch-size 4 --accumulation-steps 1` (true batch 4, no accumulation crutch),
+the 24GB A5000 should comfortably beat the 12GB card's batch=2+accum=2
 setup. 15.3M params. `EarlyStopping`'s patience counter also resets fresh on
 resume (same reason as `ModelCheckpoint` above) -- it gets a full new
 15-epoch budget from wherever this resumes, not the leftover count from the
@@ -118,7 +118,7 @@ clearview-train \
 `--batch-size 24` matches the batch size the original single-dataset UNet
 recipe already ran successfully on a 12GB card (21.5M params, but plain
 convolutions are far cheaper than Restormer's attention at the same param
-count) — the A5000 has ample headroom here, this one is low-risk.
+count), the A5000 has ample headroom here, this one is low-risk.
 `--patience 15` still applies against the full 300-epoch budget, so this
 stops itself if it plateaus well before 300 -- it's a ceiling, not a target.
 
@@ -166,15 +166,90 @@ clearview-train \
 ```
 
 `--model nafnet` is the mid-size variant (14.3M params, comparable to
-Restormer's 15.3M) — not `nafnet_small` (1.1M) or `nafnet_large` (116M).
+Restormer's 15.3M), not `nafnet_small` (1.1M) or `nafnet_large` (116M).
 `EarlyStopping`'s patience counter resets fresh on resume too, same as
 Restormer -- full new 15-epoch budget from wherever this picks back up.
 
 ---
 
+## 4a. NAFNet (Small) -- new run, 48GB (RTX A6000)
+
+`nafnet_small` is the smallest NAFNet variant, 1.1M params, well under a
+tenth the size of the mid-size `nafnet` already running. This is a fresh
+run, not a resume, and its own separate output directory so it doesn't
+collide with the mid-size run above.
+
+**Sized for the 48GB A6000, not the 24GB A5000 the rest of this doc
+targets.** Everything else in this section 4a/4b pair assumes double the
+VRAM budget the other entries were sized for.
+
+```bash
+clearview-train \
+  --model nafnet_small \
+  --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /home/saumya.saksena/projects/mixed_datasets \
+  --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
+  --crop-size 256 --batch-size 64 --val-batch-size 64 --num-workers 8 \
+  --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
+  --epochs 100 --early-stopping --patience 15 \
+  --checkpoint-monitor val_psnr --checkpoint-mode max \
+  --mixed-precision --ema --ema-decay 0.999 --compile \
+  --output-dir ./runs/rain_mixed_nafnet_small \
+  --device cuda
+```
+
+`--batch-size 64` is an estimate, not a measurement, doubled from the
+24GB-sized estimate (32) rather than independently derived, no smoke test
+has been run against this specific variant on either card. 1.1M params is
+small enough that it should comfortably fit, but "should" is still doing
+real work in that sentence. Time one epoch before trusting the full
+100-epoch budget, same as every other unverified number in this doc.
+
+---
+
+## 4b. NAFNet (Large) -- new run, 48GB (RTX A6000)
+
+`nafnet_large` is the biggest NAFNet variant, 116M params, about 8x the
+mid-size `nafnet` and roughly 7.5x Restormer. This is the one entry in this
+whole document I'd treat as genuinely uncertain rather than a reasonable
+estimate: nothing at this parameter scale has been smoke-tested or run at
+all this session, and the batch size below is a conservative guess sized to
+avoid an obvious OOM, not a number backed by any measurement.
+
+```bash
+clearview-train \
+  --model nafnet_large \
+  --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /home/saumya.saksena/projects/mixed_datasets \
+  --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
+  --crop-size 256 --batch-size 4 --accumulation-steps 1 --val-batch-size 4 --num-workers 8 \
+  --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
+  --epochs 100 --early-stopping --patience 15 \
+  --checkpoint-monitor val_psnr --checkpoint-mode max \
+  --mixed-precision --ema --ema-decay 0.999 --compile \
+  --output-dir ./runs/rain_mixed_nafnet_large \
+  --device cuda
+```
+
+`--batch-size 4 --accumulation-steps 1` doubles the true batch size from
+the 24GB-sized version (2, with accumulation-steps 2 to reach an effective
+batch of 4) rather than just doubling the accumulation count, same "drop
+the accumulation crutch once there's real headroom" pattern used for
+Restormer and UNet earlier in this doc. Strongly recommend a real smoke
+test (small subsets, 1 epoch, same pattern used for Restormer/UNet earlier)
+before launching this one for real, not just a 1-epoch timing check. At
+116M params, an OOM here wastes more time to discover than at any smaller
+variant, and there's no measurement yet to say `--batch-size 4` is even
+safe on 48GB, only that it's conservative relative to what 48GB could
+plausibly support.
+
+---
+
 ## Before committing the weekend to any of these
 
-Time one real epoch on the actual server first — a 4070 Super and an A5000
+Time one real epoch on the actual server first, a 4070 Super and an A5000
 are close enough on paper that guessing wastes more time than measuring:
 
 ```bash
