@@ -132,26 +132,30 @@ blended average on its own:
 
 ### Models
 
-| Model          | Training Data            | Validation Checkpoint                           | HF Model Card  |
-| -------------- | ------------------------ | ----------------------------------------------- | -------------- |
-| Restormer      | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| UNet (Vanilla) | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
-| NAFNet         | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| Model          | Params | Training Data            | Validation Checkpoint                           | HF Model Card  |
+| -------------- | ------ | ------------------------ | ----------------------------------------------- | -------------- |
+| Restormer      | 15.3M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| UNet (Vanilla) | 21.5M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| NAFNet (Small) | 1.1M   | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| NAFNet (Mid)   | 14.3M  | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
+| NAFNet (Large) | 116M   | Mixed (synthetic + real) | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon |
 
 ### Benchmark Results (PSNR / SSIM)
 
-| Test Set                                 | Domain                | Restormer (mixed) | UNet (Vanilla, mixed) | NAFNet (mixed) |
-| ---------------------------------------- | --------------------- | ----------------- | --------------------- | -------------- |
-| Rain100L [[1]](#references)              | Synthetic             | _pending_         | _pending_             | _pending_      |
-| Rain100H [[1]](#references)              | Synthetic             | _pending_         | _pending_             | _pending_      |
-| Test100 [[2]](#references)               | Synthetic             | _pending_         | _pending_             | _pending_      |
-| Test1200 [[3]](#references)              | Synthetic             | _pending_         | _pending_             | _pending_      |
-| Test2800 [[4]](#references)              | Synthetic             | _pending_         | _pending_             | _pending_      |
-| DDN-Data [[4]](#references)              | Synthetic             | _pending_         | _pending_             | _pending_      |
-| SPA-Data [[5]](#references)              | Real-world            | _pending_         | _pending_             | _pending_      |
-| RealRain-1k-H [[6]](#references)         | Real-world            | _pending_         | _pending_             | _pending_      |
-| RealRain-1k-L [[6]](#references)         | Real-world            | _pending_         | _pending_             | _pending_      |
-| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_         | _pending_             | _pending_      |
+| Test Set                                 | Domain                | Restormer | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid) | NAFNet (Large) |
+| ---------------------------------------- | --------------------- | --------- | -------------- | -------------- | ------------ | -------------- |
+| Rain100L [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| Rain100H [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| Test100 [[2]](#references)               | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| Test1200 [[3]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| Test2800 [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| DDN-Data [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| SPA-Data [[5]](#references)              | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| RealRain-1k-H [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| RealRain-1k-L [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      |
+
+All models trained under the identical mixed-domain recipe; only batch size/accumulation steps vary per architecture size. See [`configs/mix/trainer.md`](configs/mix/trainer.md) for the exact commands, including real measured (not estimated) batch sizes for each NAFNet variant.
 
 ---
 
@@ -167,8 +171,11 @@ blended average on its own:
 
 ## 🔮 Roadmap
 
-- [ ] Temporal consistency for video
 - [x] Real-world rain dataset (SPA-Data, RealRain-1k-H/L, blended with synthetic sources via `--mix-config`)
+- [x] Add UResNet model support
+- [x] Add Restormer model support
+- [x] Add NAFNet model support
+- [ ] Temporal consistency for video
 - [ ] Mobile deployment (ONNX/TensorRT)
 - [ ] Snow/fog/haze removal
 
