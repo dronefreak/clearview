@@ -172,6 +172,44 @@ All ClearView models trained under the identical mixed-domain recipe, only batch
 
 ---
 
+## 🏋️ Training and Evaluation
+
+### Training
+
+Launch a single-GPU training run with an example command like the one below:
+
+```bash
+clearview-train \
+  --model nafnet_small \
+  --mix-config configs/mix/rain_mixed_synthetic_real.yaml --mix-sampler \
+  --val-mix-config configs/mix/rain_mixed_val.yaml \
+  --data-dir /path/to/mixed_datasets \
+  --loss custom --loss-config '{"charbonnier": {"weight": 1.0}}' \
+  --crop-size 256 --batch-size 64 --val-batch-size 64 --num-workers 8 \
+  --optimizer adamw --lr 1e-4 --scheduler cosine --warmup-epochs 5 \
+  --epochs 100 --early-stopping --patience 15 \
+  --checkpoint-monitor val_psnr --checkpoint-mode max \
+  --mixed-precision --ema --ema-decay 0.999 --compile \
+  --output-dir ./runs/rain_mixed_nafnet_small \
+  --device cuda
+```
+
+### Evaluation
+
+Once training finishes, evaluate a checkpoint against a labeled test set:
+
+```bash
+clearview-evaluate \
+  --model unet --weights ./runs/rain_mixed_unet/checkpoints/best_val_psnr.pth \
+  --data-dir /path/to/rainy_image_dataset \
+  --dataset-type rain1400 \
+  --rainy-dir testing/rainy_image --clean-dir testing/ground_truth \
+  --batch-size 16 \
+  --output-dir ./runs/rain_mixed_unet/test_eval
+```
+
+---
+
 ## 🔮 Roadmap
 
 - [x] Real-world rain dataset (SPA-Data, RealRain-1k-H/L, blended with synthetic sources via `--mix-config`)
