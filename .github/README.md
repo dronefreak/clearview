@@ -130,14 +130,14 @@ blended average on its own:
 
 ### Models
 
-| Model                              | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                           |
-| ---------------------------------- | ------ | ---------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------- |
-| Restormer [[9]](#references)       | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| UNet (Vanilla) [[10]](#references) | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Small) [[11]](#references) | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Mid) [[11]](#references)   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| NAFNet (Large) [[11]](#references) | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🚧 Coming soon                                                          |
-| Histoformer [[8]](#references)     | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer) |
+| Model                              | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                                                                  |
+| ---------------------------------- | ------ | ---------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Restormer [[9]](#references)       | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-restormer](https://huggingface.co/dronefreak/clearview-derain-restormer)       |
+| UNet (Vanilla) [[10]](#references) | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-unet](https://huggingface.co/dronefreak/clearview-derain-unet)                 |
+| NAFNet (Small) [[11]](#references) | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet-small](https://huggingface.co/dronefreak/clearview-derain-nafnet-small) |
+| NAFNet (Mid) [[11]](#references)   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet](https://huggingface.co/dronefreak/clearview-derain-nafnet)             |
+| NAFNet (Large) [[11]](#references) | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet-large](https://huggingface.co/dronefreak/clearview-derain-nafnet-large) |
+| Histoformer [[8]](#references)     | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | 🤗 [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer)                                     |
 
 Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
@@ -178,7 +178,9 @@ All ClearView models trained under the identical mixed-domain recipe, only batch
 - [x] Add UResNet model support
 - [x] Add Restormer model support
 - [x] Add NAFNet model support
-- [x] Add Histormer model support (inference-only)
+- [x] Add Histoformer model support (inference-only)
+- [x] Mixed-domain training across the full model zoo (Restormer, UNet, NAFNet Small/Mid/Large)
+- [x] Release trained checkpoints on Hugging Face
 - [ ] Temporal consistency for video
 - [ ] Mobile deployment (ONNX/TensorRT)
 - [ ] Snow/fog/haze removal
