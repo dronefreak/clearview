@@ -85,7 +85,7 @@ clearview-inference --model unet --weights clearview-derain-unet.pth \
 
 ---
 
-## 🌍 Mixed-Domain Training (In Progress)
+## 🌍 Mixed-Domain Training
 
 Training on a blended synthetic + real-world rain set (Rain13K, DDN-Data,
 SPA-Data, RealRain-1k-H/L, mildly oversampling the real-world sources) and
@@ -93,8 +93,6 @@ selecting checkpoints against a blended validation metric across four of
 those sources, rather than optimizing for one benchmark, for a model that
 holds up reasonably across domains instead of maxing out a single dataset's
 quirks. See [`configs/mix/`](configs/mix/) for the exact recipe.
-
-**Status: training in progress. Numbers below are placeholders, not results.**
 
 ### Training Mix
 
@@ -147,20 +145,20 @@ In our own spot checks (both `net_g_real` and `net_g_best`), its visible effect 
 
 ### Benchmark Results (PSNR / SSIM)
 
-| Test Set                                 | Domain                | Restormer | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid) | NAFNet (Large) | Histoformer |
-| ---------------------------------------- | --------------------- | --------- | -------------- | -------------- | ------------ | -------------- | ----------- |
-| Rain100L [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| Rain100H [[1]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| Test100 [[2]](#references)               | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| Test1200 [[3]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| Test2800 [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| DDN-Data [[4]](#references)              | Synthetic             | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| SPA-Data [[5]](#references)              | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| RealRain-1k-H [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| RealRain-1k-L [[6]](#references)         | Real-world            | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
-| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | _pending_ | _pending_      | _pending_      | _pending_    | _pending_      | _pending_   |
+| Test Set                                 | Domain                | Restormer     | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid)  | NAFNet (Large) | Histoformer   |
+| ---------------------------------------- | --------------------- | ------------- | -------------- | -------------- | ------------- | -------------- | ------------- |
+| Rain100L [[1]](#references)              | Synthetic             | 35.04 / 0.962 | 30.96 / 0.932  | 30.20 / 0.922  | 34.14 / 0.957 | 34.72 / 0.962  | 25.83 / 0.836 |
+| Rain100H [[1]](#references)              | Synthetic             | 27.87 / 0.856 | 26.41 / 0.823  | 25.02 / 0.763  | 27.72 / 0.849 | 27.69 / 0.856  | 12.22 / 0.364 |
+| Test100 [[2]](#references)               | Synthetic             | 27.34 / 0.869 | 24.91 / 0.836  | 25.26 / 0.820  | 27.96 / 0.873 | 27.68 / 0.864  | 22.01 / 0.684 |
+| Test1200 [[3]](#references)              | Synthetic             | 31.38 / 0.897 | 29.08 / 0.868  | 30.43 / 0.874  | 31.28 / 0.898 | 31.37 / 0.897  | 24.20 / 0.727 |
+| Test2800 [[4]](#references)              | Synthetic             | 31.78 / 0.924 | 30.61 / 0.909  | 30.58 / 0.906  | 31.66 / 0.923 | 31.74 / 0.924  | 24.71 / 0.785 |
+| DDN-Data [[4]](#references)              | Synthetic             | 31.97 / 0.928 | 30.67 / 0.912  | 30.83 / 0.910  | 31.84 / 0.926 | 31.89 / 0.927  | 25.04 / 0.784 |
+| SPA-Data [[5]](#references)              | Real-world            | 42.53 / 0.986 | 39.01 / 0.980  | 37.13 / 0.973  | 41.77 / 0.986 | 41.98 / 0.986  | 32.18 / 0.929 |
+| RealRain-1k-H [[6]](#references)         | Real-world            | 38.68 / 0.982 | 35.98 / 0.971  | 34.33 / 0.957  | 38.68 / 0.980 | 39.23 / 0.982  | 21.86 / 0.761 |
+| RealRain-1k-L [[6]](#references)         | Real-world            | 40.90 / 0.987 | 38.04 / 0.980  | 36.59 / 0.970  | 40.64 / 0.986 | 41.09 / 0.987  | 25.47 / 0.867 |
+| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | 13.67 / 0.583 | 13.66 / 0.570  | 13.59 / 0.574  | 13.64 / 0.579 | 13.53 / 0.576  | 30.75 / 0.923 |
 
-All ClearView models trained under the identical mixed-domain recipe, only batch size/accumulation steps vary per architecture size. Histoformer is included as an external, inference-only reference point, not trained under this recipe.
+All ClearView models trained under the identical mixed-domain recipe, only batch size/accumulation steps vary per architecture size. Histoformer is included as an external, inference-only reference point, not trained under this recipe. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), full per-image distributions and logs live under `runs/<model>/eval/<dataset>/`.
 
 ---
 
