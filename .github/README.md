@@ -132,18 +132,18 @@ blended average on its own:
 
 10 architectures trained or wired in so far. All 9 ClearView-trained models below share the identical mixed-domain recipe, training data (5-source mix, see above) and checkpoint selection (blended validation set, see above), only batch size/accumulation steps and architecture-specific hyperparameters vary by size. Histoformer is the one exception, see the note below the table.
 
-| Model                              | Params | HF Model Card                                                                                                    |
-| ---------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
-| Restormer [[9]](#references)       | 15.3M  | 🤗 [dronefreak/clearview-derain-restormer](https://huggingface.co/dronefreak/clearview-derain-restormer)         |
-| Restormer-Small [[9]](#references) | 2.3M   | 🚧 Coming soon                                                                                                   |
-| UNet (Vanilla) [[10]](#references) | 21.5M  | 🤗 [dronefreak/clearview-derain-unet](https://huggingface.co/dronefreak/clearview-derain-unet)                   |
-| NAFNet (Small) [[11]](#references) | 1.1M   | 🤗 [dronefreak/clearview-derain-nafnet-small](https://huggingface.co/dronefreak/clearview-derain-nafnet-small)   |
-| NAFNet (Mid) [[11]](#references)   | 14.3M  | 🤗 [dronefreak/clearview-derain-nafnet](https://huggingface.co/dronefreak/clearview-derain-nafnet)               |
-| NAFNet (Large) [[11]](#references) | 116M   | 🤗 [dronefreak/clearview-derain-nafnet-large](https://huggingface.co/dronefreak/clearview-derain-nafnet-large)   |
-| ResNet18-UNet [[12]](#references)  | 14.4M  | 🚧 Coming soon                                                                                                   |
-| ResNet34-UNet [[12]](#references)  | 24.5M  | 🤗 [dronefreak/clearview-derain-resnet34-unet](https://huggingface.co/dronefreak/clearview-derain-resnet34-unet) |
-| ResNet50-UNet [[12]](#references)  | 73.3M  | 🚧 Coming soon                                                                                                   |
-| Histoformer [[8]](#references)     | 16.6M  | 🤗 [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer)                                       |
+| Model                              | Params | HF Model Card                                                                                                        |
+| ---------------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Restormer [[9]](#references)       | 15.3M  | 🤗 [dronefreak/clearview-derain-restormer](https://huggingface.co/dronefreak/clearview-derain-restormer)             |
+| Restormer-Small [[9]](#references) | 2.3M   | 🤗 [dronefreak/clearview-derain-restormer-small](https://huggingface.co/dronefreak/clearview-derain-restormer-small) |
+| UNet (Vanilla) [[10]](#references) | 21.5M  | 🤗 [dronefreak/clearview-derain-unet](https://huggingface.co/dronefreak/clearview-derain-unet)                       |
+| NAFNet (Small) [[11]](#references) | 1.1M   | 🤗 [dronefreak/clearview-derain-nafnet-small](https://huggingface.co/dronefreak/clearview-derain-nafnet-small)       |
+| NAFNet (Mid) [[11]](#references)   | 14.3M  | 🤗 [dronefreak/clearview-derain-nafnet](https://huggingface.co/dronefreak/clearview-derain-nafnet)                   |
+| NAFNet (Large) [[11]](#references) | 116M   | 🤗 [dronefreak/clearview-derain-nafnet-large](https://huggingface.co/dronefreak/clearview-derain-nafnet-large)       |
+| ResNet18-UNet [[12]](#references)  | 14.4M  | 🤗 [dronefreak/clearview-derain-resnet18-unet](https://huggingface.co/dronefreak/clearview-derain-resnet18-unet)     |
+| ResNet34-UNet [[12]](#references)  | 24.5M  | 🤗 [dronefreak/clearview-derain-resnet34-unet](https://huggingface.co/dronefreak/clearview-derain-resnet34-unet)     |
+| ResNet50-UNet [[12]](#references)  | 73.3M  | 🤗 [dronefreak/clearview-derain-resnet50-unet](https://huggingface.co/dronefreak/clearview-derain-resnet50-unet)     |
+| Histoformer [[8]](#references)     | 16.6M  | 🤗 [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer)                                           |
 
 Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, trained on different data, selected against a different validation set, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
