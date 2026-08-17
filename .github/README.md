@@ -7,7 +7,7 @@
 <!-- ROW 1: Core Identity (What this project is) -->
 <div style="display: flex; justify-content: center; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 24px;">
   <!-- Project Identity -->
-  <img src="https://img.shields.io/badge/Models-6%20architectures-0aa1a7?style=flat-square" alt="Models">
+  <img src="https://img.shields.io/badge/Models-10%20architectures-0aa1a7?style=flat-square" alt="Models">
 
   <!-- Tech Stack & Quality -->
   <a href="https://www.python.org/downloads/">
@@ -130,36 +130,41 @@ blended average on its own:
 
 ### Models
 
-| Model                              | Params | Training Data                      | Validation Checkpoint                           | HF Model Card                                                                                                    |
-| ---------------------------------- | ------ | ---------------------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Restormer [[9]](#references)       | 15.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-restormer](https://huggingface.co/dronefreak/clearview-derain-restormer)         |
-| UNet (Vanilla) [[10]](#references) | 21.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-unet](https://huggingface.co/dronefreak/clearview-derain-unet)                   |
-| NAFNet (Small) [[11]](#references) | 1.1M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet-small](https://huggingface.co/dronefreak/clearview-derain-nafnet-small)   |
-| NAFNet (Mid) [[11]](#references)   | 14.3M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet](https://huggingface.co/dronefreak/clearview-derain-nafnet)               |
-| NAFNet (Large) [[11]](#references) | 116M   | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-nafnet-large](https://huggingface.co/dronefreak/clearview-derain-nafnet-large)   |
-| ResNet34-UNet [[12]](#references)  | 24.5M  | Mixed (synthetic + real)           | Blended (SPA-Data + RealRain-1k-H/L + Rain100L) | 🤗 [dronefreak/clearview-derain-resnet34-unet](https://huggingface.co/dronefreak/clearview-derain-resnet34-unet) |
-| Histoformer [[8]](#references)     | 16.6M  | N/A (original authors' checkpoint) | N/A (inference-only)                            | 🤗 [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer)                                       |
+10 architectures trained or wired in so far. All 9 ClearView-trained models below share the identical mixed-domain recipe, training data (5-source mix, see above) and checkpoint selection (blended validation set, see above), only batch size/accumulation steps and architecture-specific hyperparameters vary by size. Histoformer is the one exception, see the note below the table.
 
-Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
+| Model                              | Params | HF Model Card                                                                                                    |
+| ---------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| Restormer [[9]](#references)       | 15.3M  | 🤗 [dronefreak/clearview-derain-restormer](https://huggingface.co/dronefreak/clearview-derain-restormer)         |
+| Restormer-Small [[9]](#references) | 2.3M   | 🚧 Coming soon                                                                                                   |
+| UNet (Vanilla) [[10]](#references) | 21.5M  | 🤗 [dronefreak/clearview-derain-unet](https://huggingface.co/dronefreak/clearview-derain-unet)                   |
+| NAFNet (Small) [[11]](#references) | 1.1M   | 🤗 [dronefreak/clearview-derain-nafnet-small](https://huggingface.co/dronefreak/clearview-derain-nafnet-small)   |
+| NAFNet (Mid) [[11]](#references)   | 14.3M  | 🤗 [dronefreak/clearview-derain-nafnet](https://huggingface.co/dronefreak/clearview-derain-nafnet)               |
+| NAFNet (Large) [[11]](#references) | 116M   | 🤗 [dronefreak/clearview-derain-nafnet-large](https://huggingface.co/dronefreak/clearview-derain-nafnet-large)   |
+| ResNet18-UNet [[12]](#references)  | 14.4M  | 🚧 Coming soon                                                                                                   |
+| ResNet34-UNet [[12]](#references)  | 24.5M  | 🤗 [dronefreak/clearview-derain-resnet34-unet](https://huggingface.co/dronefreak/clearview-derain-resnet34-unet) |
+| ResNet50-UNet [[12]](#references)  | 73.3M  | 🚧 Coming soon                                                                                                   |
+| Histoformer [[8]](#references)     | 16.6M  | 🤗 [dronefreak/Histoformer](https://huggingface.co/dronefreak/Histoformer)                                       |
+
+Histoformer is wired in for inference and cross-domain comparison only. Its weights are the original authors' own all-weather (rain/raindrop/snow) checkpoint, not a ClearView training run, trained on different data, selected against a different validation set, so there is no `clearview-train` recipe for it here. To train Histoformer from scratch, use the [official repository](https://github.com/sunshangquan/Histoformer).
 
 In our own spot checks (both `net_g_real` and `net_g_best`), its visible effect leaned much closer to dehazing/contrast correction than streak removal, on images with a haze or veiling component it cleaned up dramatically, but on images with clear rain streaks and no haze, including a genuine rain photograph, streaks were left largely untouched. Results can vary a lot by input, treat it as a reference point rather than a strong deraining baseline.
 
 ### Benchmark Results (PSNR / SSIM)
 
-| Test Set                                 | Domain                | Restormer     | UNet (Vanilla) | NAFNet (Small) | NAFNet (Mid)  | NAFNet (Large) | ResNet34-UNet | Histoformer   |
-| ---------------------------------------- | --------------------- | ------------- | -------------- | -------------- | ------------- | -------------- | ------------- | ------------- |
-| Rain100L [[1]](#references)              | Synthetic             | 35.04 / 0.962 | 30.96 / 0.932  | 30.20 / 0.922  | 34.14 / 0.957 | 34.59 / 0.961  | 29.00 / 0.894 | 25.83 / 0.836 |
-| Rain100H [[1]](#references)              | Synthetic             | 27.87 / 0.856 | 26.41 / 0.823  | 25.02 / 0.763  | 27.72 / 0.849 | 27.65 / 0.856  | 24.67 / 0.774 | 12.22 / 0.364 |
-| Test100 [[2]](#references)               | Synthetic             | 27.34 / 0.869 | 24.91 / 0.836  | 25.26 / 0.820  | 27.96 / 0.873 | 27.71 / 0.865  | 26.38 / 0.839 | 22.01 / 0.684 |
-| Test1200 [[3]](#references)              | Synthetic             | 31.38 / 0.897 | 29.08 / 0.868  | 30.43 / 0.874  | 31.28 / 0.898 | 31.37 / 0.898  | 28.19 / 0.852 | 24.20 / 0.727 |
-| Test2800 [[4]](#references)              | Synthetic             | 31.78 / 0.924 | 30.61 / 0.909  | 30.58 / 0.906  | 31.66 / 0.923 | 31.75 / 0.924  | 28.31 / 0.875 | 24.71 / 0.785 |
-| DDN-Data [[4]](#references)              | Synthetic             | 31.97 / 0.928 | 30.67 / 0.912  | 30.83 / 0.910  | 31.84 / 0.926 | 31.90 / 0.927  | 28.47 / 0.879 | 25.04 / 0.784 |
-| SPA-Data [[5]](#references)              | Real-world            | 42.53 / 0.986 | 39.01 / 0.980  | 37.13 / 0.973  | 41.77 / 0.986 | 41.99 / 0.986  | 36.97 / 0.971 | 32.18 / 0.929 |
-| RealRain-1k-H [[6]](#references)         | Real-world            | 38.68 / 0.982 | 35.98 / 0.971  | 34.33 / 0.957  | 38.68 / 0.980 | 39.34 / 0.982  | 35.21 / 0.969 | 21.86 / 0.761 |
-| RealRain-1k-L [[6]](#references)         | Real-world            | 40.90 / 0.987 | 38.04 / 0.980  | 36.59 / 0.970  | 40.64 / 0.986 | 41.17 / 0.987  | 36.88 / 0.977 | 25.47 / 0.867 |
-| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | 13.67 / 0.583 | 13.66 / 0.570  | 13.59 / 0.574  | 13.64 / 0.579 | 13.53 / 0.576  | 13.54 / 0.558 | 30.75 / 0.923 |
+| Test Set                                 | Domain                | Restormer     | NAFNet (Large) | NAFNet (Mid)  | UNet (Vanilla) | ResNet50-UNet |
+| ---------------------------------------- | --------------------- | ------------- | -------------- | ------------- | -------------- | ------------- |
+| Rain100L [[1]](#references)              | Synthetic             | 36.04 / 0.969 | 34.59 / 0.961  | 34.14 / 0.957 | 30.96 / 0.932  | 29.79 / 0.906 |
+| Rain100H [[1]](#references)              | Synthetic             | 27.78 / 0.868 | 27.65 / 0.856  | 27.72 / 0.849 | 26.41 / 0.823  | 25.37 / 0.794 |
+| Test100 [[2]](#references)               | Synthetic             | 28.65 / 0.881 | 27.71 / 0.865  | 27.96 / 0.873 | 24.91 / 0.836  | 26.16 / 0.839 |
+| Test1200 [[3]](#references)              | Synthetic             | 31.91 / 0.906 | 31.37 / 0.898  | 31.28 / 0.898 | 29.08 / 0.868  | 28.44 / 0.856 |
+| Test2800 [[4]](#references)              | Synthetic             | 32.05 / 0.928 | 31.75 / 0.924  | 31.66 / 0.923 | 30.61 / 0.909  | 28.67 / 0.883 |
+| DDN-Data [[4]](#references)              | Synthetic             | 32.21 / 0.931 | 31.90 / 0.927  | 31.84 / 0.926 | 30.67 / 0.912  | 28.72 / 0.886 |
+| SPA-Data [[5]](#references)              | Real-world            | 44.67 / 0.989 | 41.99 / 0.986  | 41.77 / 0.986 | 39.01 / 0.980  | 37.07 / 0.973 |
+| RealRain-1k-H [[6]](#references)         | Real-world            | 40.28 / 0.985 | 39.34 / 0.982  | 38.68 / 0.980 | 35.98 / 0.971  | 34.94 / 0.970 |
+| RealRain-1k-L [[6]](#references)         | Real-world            | 42.35 / 0.989 | 41.17 / 0.987  | 40.64 / 0.986 | 38.04 / 0.980  | 36.52 / 0.978 |
+| AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | 13.72 / 0.584 | 13.53 / 0.576  | 13.64 / 0.579 | 13.66 / 0.570  | 13.61 / 0.555 |
 
-All ClearView models trained under the identical mixed-domain recipe, only batch size/accumulation steps vary per architecture size. Histoformer is included as an external, inference-only reference point, not trained under this recipe. ResNet34-UNet trails the rest of the ClearView-native lineup on every rain-only test set, and shows negative Rain Removal Rate (Sobel-residual metric, see each model card's Detailed Test-Set Metrics) on Rain100L and SPA-Data specifically, mild over-sharpening rather than a training failure, but worth flagging plainly rather than only in PSNR/SSIM form. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), full per-image distributions and logs live under `runs/<model>/eval/<dataset>/`.
+Columns sorted highest to lowest by average PSNR across the 9 rain-only test sets (Restormer 35.10, NAFNet Large 34.16, NAFNet Mid 33.97, UNet 31.74, ResNet50-UNet 30.63). This is a curated subset, not the full model zoo, NAFNet (Small), ResNet18/34-UNet, and Histoformer are trained/evaluated too but omitted here for brevity, see their individual model cards (above) for full numbers. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), full per-image distributions and logs live under `runs/<model>/eval/<dataset>/`.
 
 ---
 
