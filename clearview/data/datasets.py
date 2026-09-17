@@ -6,7 +6,7 @@ various formats (image pairs, directories, etc.).
 
 import logging
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence, Tuple, Union, cast
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import torch
@@ -1015,6 +1015,641 @@ class SPADataDataset(Dataset):
 
         Returns:
             Tuple of (rainy_tensor, clean_tensor)
+        """
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
+
+class GTRainDataset(Dataset):
+    """Dataset for GT-RAIN, a real-world paired-frame rain dataset.
+
+    From Ba et al., "Not Just Streaks: Towards Ground Truth for Single Image
+    Deraining" (GT-RAIN), ECCV 2022. Pairs are real photographs, not
+    synthetically rendered: each scene was filmed continuously across the
+    moment rain starts or stops, rather than compositing rain onto a clean
+    reference shot.
+
+    Distributed as one directory per scene, each holding a single clean
+    reference frame shared across roughly 300 rainy frames of that same
+    scene, distinguished by a ``-C-``/``-R-`` marker in the filename::
+
+        GT-RAIN_train/
+        ├── scene_name_1/
+        │   ├── scene_name_1-Webcam-C-000.png   # clean reference
+        │   ├── scene_name_1-Webcam-R-000.png   # rainy frame
+        │   ├── scene_name_1-Webcam-R-001.png
+        │   └── ...
+        └── scene_name_2/
+            └── ...
+
+    One scene in the official validation split ("Gurutto_1-2") instead has a
+    distinct clean frame per rainy frame rather than one shared clean frame.
+    This class detects that automatically by counting clean files per scene
+    and matching by trailing index when there's more than one, rather than
+    hardcoding the scene name.
+
+    Args:
+        root_dir: Directory containing one subdirectory per scene (e.g.
+            pointed at ``GT-RAIN_train``, ``GT-RAIN_val``, or ``GT-RAIN_test``
+            after extracting the official split archives)
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> dataset = GTRainDataset('data/GT-RAIN_train')
+        >>> rainy, clean = dataset[0]
+    """
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize GT-RAIN dataset.
+
+        Args:
+            root_dir: Directory containing one subdirectory per scene
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If root_dir has no scene subdirectories
+            ValueError: If no rainy/clean pairs could be matched
+        """
+        self.root_dir = Path(root_dir)
+        self.transform = transform
+        self.extensions = extensions
+
+        try:
+            scene_dirs = sorted(d for d in self.root_dir.iterdir() if d.is_dir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Root directory not found: {self.root_dir}") from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read root directory '{self.root_dir}': {e}"
+            ) from e
+
+        if not scene_dirs:
+            raise FileNotFoundError(f"No scene subdirectories found in {self.root_dir}")
+
+        self.rainy_files: List[Path] = []
+        self.clean_files: List[Path] = []
+
+        for scene_dir in scene_dirs:
+            files = sorted(
+                f for f in scene_dir.iterdir() if f.suffix.lower() in extensions
+            )
+            rainy = [f for f in files if "-R-" in f.name]
+            clean = [f for f in files if "-C-" in f.name]
+
+            if not rainy or not clean:
+                continue
+
+            if len(clean) == 1:
+                self.rainy_files.extend(rainy)
+                self.clean_files.extend([clean[0]] * len(rainy))
+            else:
+                # More than one clean frame in this scene (e.g. the official
+                # "Gurutto_1-2" validation scene): match by shared trailing
+                # index after the -R-/-C- marker instead of broadcasting.
+                clean_by_idx = {f.name.split("-C-")[-1]: f for f in clean}
+                for r in rainy:
+                    idx = r.name.split("-R-")[-1]
+                    c = clean_by_idx.get(idx)
+                    if c is not None:
+                        self.rainy_files.append(r)
+                        self.clean_files.append(c)
+
+        if not self.rainy_files:
+            raise ValueError(f"No rainy/clean pairs found under {self.root_dir}")
+
+        logger.info(f"Loaded {len(self.rainy_files)} image pairs from GT-RAIN")
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a rainy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (rainy_tensor, clean_tensor)
+        """
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
+
+class RainDropDataset(Dataset):
+    """Dataset for RainDrop / DeRaindrop, a lens-adherent raindrop removal dataset.
+
+    From Qian et al., "Attentive Generative Adversarial Network for Raindrop
+    Removal from a Single Image" (DeRaindrop), CVPR 2018. This is a
+    physically distinct degradation from rain streaks or general rain/haze
+    mixes: droplets adhered to a glass window or camera lens, captured with
+    two panes of glass side by side (one clean, one sprayed with water) so
+    the background scene stays spatially aligned between pairs.
+
+    Rainy and clean images share a common numeric ID but different filename
+    **suffixes** (``{id}_rain.png`` / ``{id}_clean.png``), not identical
+    stems, so the exact-filename matching used by :class:`ImagePairDataset`
+    does not apply directly. This class matches pairs by stripping the known
+    suffixes before comparing IDs::
+
+        train/
+        ├── data/    # {id}_rain.png   (861 images)
+        └── gt/      # {id}_clean.png  (861 images)
+        test_a/
+        ├── data/    # {id}_rain.png   (58 images)
+        └── gt/      # {id}_clean.png  (58 images)
+        test_b/
+        ├── data/    # {id}_rain.jpg   (249 images)
+        └── gt/      # {id}_clean.jpg  (249 images)
+
+    Args:
+        root_dir: Directory containing the dataset (or split subdir)
+        split: Optional split name (e.g. 'train' | 'test_a' | 'test_b') to
+            look for under ``root_dir``. If ``None``, ``root_dir`` is
+            treated as already pointing at the split directory.
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> train_dataset = RainDropDataset('data/RainDrop', split='train')
+        >>> test_dataset = RainDropDataset('data/RainDrop', split='test_a')
+        >>> rainy, clean = train_dataset[0]
+    """
+
+    #: Subdirectory candidates tried (in order), relative to the split dir.
+    RAINY_DIR_CANDIDATES: Tuple[str, ...] = ("data",)
+    CLEAN_DIR_CANDIDATES: Tuple[str, ...] = ("gt",)
+
+    #: Filename suffixes stripped before matching rainy/clean image IDs.
+    RAINY_SUFFIX = "_rain"
+    CLEAN_SUFFIX = "_clean"
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        split: Optional[str] = None,
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize RainDrop dataset.
+
+        Args:
+            root_dir: Root directory containing the dataset (or split subdir)
+            split: Optional split subdirectory name under ``root_dir``
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If data/gt directories cannot be located
+            ValueError: If rainy and clean directories contain mismatched IDs
+        """
+        root_dir = Path(root_dir)
+        base_dir = root_dir / split if split is not None else root_dir
+
+        rainy_dir = Rain13KDataset._find_dir(base_dir, self.RAINY_DIR_CANDIDATES)
+        clean_dir = Rain13KDataset._find_dir(base_dir, self.CLEAN_DIR_CANDIDATES)
+
+        if rainy_dir is None or clean_dir is None:
+            raise FileNotFoundError(
+                f"Could not find data/gt directories in {base_dir}. "
+                f"Expected one of: data={self.RAINY_DIR_CANDIDATES}, "
+                f"gt={self.CLEAN_DIR_CANDIDATES}"
+            )
+
+        self.rainy_dir = rainy_dir
+        self.clean_dir = clean_dir
+        self.transform = transform
+        self.extensions = extensions
+
+        try:
+            rainy_entries = list(self.rainy_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Rainy directory not found: {self.rainy_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read rainy directory '{self.rainy_dir}': {e}"
+            ) from e
+
+        try:
+            clean_entries = list(self.clean_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"Clean directory not found: {self.clean_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read clean directory '{self.clean_dir}': {e}"
+            ) from e
+
+        rainy_files = sorted(f for f in rainy_entries if f.suffix.lower() in extensions)
+        clean_files = sorted(f for f in clean_entries if f.suffix.lower() in extensions)
+
+        def _strip_suffix(stem: str, suffix: str) -> str:
+            return stem[: -len(suffix)] if stem.endswith(suffix) else stem
+
+        rainy_by_id = {_strip_suffix(f.stem, self.RAINY_SUFFIX): f for f in rainy_files}
+        clean_by_id = {_strip_suffix(f.stem, self.CLEAN_SUFFIX): f for f in clean_files}
+
+        rainy_ids = set(rainy_by_id)
+        clean_ids = set(clean_by_id)
+        only_in_rainy = rainy_ids - clean_ids
+        only_in_clean = clean_ids - rainy_ids
+
+        if only_in_rainy or only_in_clean:
+            details = []
+            if only_in_rainy:
+                details.append(f"only in data: {sorted(only_in_rainy)[:5]}")
+            if only_in_clean:
+                details.append(f"only in gt: {sorted(only_in_clean)[:5]}")
+            raise ValueError(
+                f"Unpaired images found ({'; '.join(details)}). data/gt "
+                "directories must contain matching IDs after stripping "
+                f"'{self.RAINY_SUFFIX}'/'{self.CLEAN_SUFFIX}' suffixes."
+            )
+
+        def _sort_key(image_id: str) -> Tuple[int, Union[int, str]]:
+            return (
+                (0, cast(Union[int, str], int(image_id)))
+                if image_id.isdigit()
+                else (1, image_id)
+            )
+
+        common_ids = sorted(rainy_ids, key=_sort_key)
+        self.rainy_files = [rainy_by_id[i] for i in common_ids]
+        self.clean_files = [clean_by_id[i] for i in common_ids]
+
+        logger.info(f"Loaded {len(self.rainy_files)} image pairs from RainDrop")
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a rainy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (rainy_tensor, clean_tensor)
+        """
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
+
+class NTIREHazeDataset(Dataset):
+    """Dataset for the NTIRE real-haze dehazing benchmarks (I-Haze, O-Haze, Dense-Haze, NH-Haze).
+
+    All four NTIRE challenge dehazing sets (Ancuti et al., NTIRE 2018-2020)
+    share the same real haze-machine capture methodology and near-identical
+    naming convention, differing only in a few surface details this class
+    normalizes away:
+
+    - Some ship a ``GT``/``hazy`` subdirectory pair, others (NH-Haze) ship a
+      single flat directory with both image types mixed together.
+    - Filenames mark the image type with a ``_GT``/``_hazy`` suffix,
+      sometimes with an extra domain tag in between (I-Haze/O-Haze's
+      ``_indoor``/``_outdoor``), matched here by stripping the marker
+      case-insensitively rather than assuming a fixed filename shape.
+    - File extension casing is inconsistent even within a single set
+      (O-Haze ships both ``.jpg`` and ``.JPG``).
+
+    Point ``root_dir`` at any one set's extracted top level (containing
+    either ``GT``/``hazy`` subdirectories, or the images directly)::
+
+        I-HAZE/
+        ├── GT/    # {id}_indoor_GT.jpg
+        └── hazy/  # {id}_indoor_hazy.jpg
+
+        NH-HAZE/
+        ├── 01_GT.png
+        ├── 01_hazy.png
+        └── ...
+
+    Args:
+        root_dir: Directory for one NTIRE haze set (with or without
+            GT/hazy subdirectories)
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> dataset = NTIREHazeDataset('data/I-HAZE')
+        >>> hazy, clean = dataset[0]
+    """
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize NTIRE haze dataset.
+
+        Args:
+            root_dir: Directory for one NTIRE haze set
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If root_dir cannot be read
+            ValueError: If no rainy/clean pairs could be matched
+        """
+        root_dir = Path(root_dir)
+        gt_dir = root_dir / "GT" if (root_dir / "GT").is_dir() else root_dir
+        hazy_dir = root_dir / "hazy" if (root_dir / "hazy").is_dir() else root_dir
+
+        self.transform = transform
+        self.extensions = extensions
+
+        try:
+            gt_entries = list(gt_dir.iterdir())
+            hazy_entries = list(hazy_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"Root directory not found: {root_dir}") from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read root directory '{root_dir}': {e}"
+            ) from e
+
+        def _match_marker(stem: str, marker: str) -> Optional[str]:
+            low = stem.lower()
+            idx = low.rfind(marker)
+            return stem[:idx] if idx != -1 else None
+
+        gt_by_id = {}
+        for f in gt_entries:
+            if f.suffix.lower() not in extensions:
+                continue
+            image_id = _match_marker(f.stem, "_gt")
+            if image_id is not None:
+                gt_by_id[image_id] = f
+
+        hazy_by_id = {}
+        for f in hazy_entries:
+            if f.suffix.lower() not in extensions:
+                continue
+            image_id = _match_marker(f.stem, "_hazy")
+            if image_id is not None:
+                hazy_by_id[image_id] = f
+
+        common_ids = sorted(set(gt_by_id) & set(hazy_by_id))
+        if not common_ids:
+            raise ValueError(
+                f"No hazy/GT pairs found under {root_dir}. Expected filenames "
+                "ending in '_GT'/'_hazy' (case-insensitive), optionally under "
+                "GT/hazy subdirectories."
+            )
+
+        self.rainy_files = [hazy_by_id[i] for i in common_ids]
+        self.clean_files = [gt_by_id[i] for i in common_ids]
+
+        logger.info(f"Loaded {len(self.rainy_files)} image pairs from NTIRE haze set")
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a hazy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (hazy_tensor, clean_tensor)
+        """
+        rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
+        clean_img = Image.open(self.clean_files[idx]).convert("RGB")
+
+        rainy_np = np.array(rainy_img).astype(np.float32) / 255.0
+        clean_np = np.array(clean_img).astype(np.float32) / 255.0
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        rainy_tensor = numpy_to_tensor(rainy_np)
+        clean_tensor = numpy_to_tensor(clean_np)
+
+        return rainy_tensor, clean_tensor
+
+
+class RainDSDataset(Dataset):
+    """Dataset for RainDS, a combined rain-streak + raindrop removal benchmark.
+
+    From Quan et al., "Removing Raindrops and Rain Streaks in One Go"
+    (RainDS), CVPR 2021. Each clean (``gt``) image has up to three separate
+    degraded variants captured/rendered against it: raindrop-only,
+    rainstreak-only, and both combined, so a single dataset instance covers
+    raindrop removal, streak removal, or the joint task depending on which
+    ``degradation`` is selected.
+
+    Distributed as two collections with different splits and a different
+    filename convention:
+
+        RainDS_syn/{train,test}/{gt,raindrop,rainstreak,rainstreak_raindrop}/
+            gt/norain-{id}.png                    (or pie-norain-{id}.png)
+            raindrop/rd-{id}.png                  (or pie-rd-{id}.png)
+            rainstreak/rain-{id}.png               (or pie-rain-{id}.png)
+            rainstreak_raindrop/rd-rain-{id}.png   (or pie-rd-rain-{id}.png)
+
+        RainDS_real/{train_set,test_set}/{gt,raindrop,rainstreak,rainstreak_raindrop}/
+            all four subdirectories use identical plain ``{id}.png`` filenames
+
+    The ``pie-`` prefix marks a second sub-collection folded into RainDS_syn
+    with its own, otherwise-overlapping numeric IDs; this class preserves it
+    as part of the matching key (rather than stripping it) so the two
+    sub-collections don't collide with each other.
+
+    Args:
+        root_dir: Directory for one split (e.g. pointed at
+            ``RainDS_syn/train`` or ``RainDS_real/test_set``), containing a
+            ``gt/`` subdirectory and at least one degraded-category
+            subdirectory
+        degradation: Which degraded category to pair against ``gt``:
+            ``'raindrop'``, ``'rainstreak'``, or ``'rainstreak_raindrop'``
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions
+
+    Example:
+        >>> dataset = RainDSDataset('data/RainDS_syn/train', degradation='rainstreak_raindrop')
+        >>> degraded, clean = dataset[0]
+
+    Note:
+        RainDS_real's official ``test_set/rainstreak`` folder ships one file
+        (``IMG_7435.png``) with no corresponding numeric ID in ``gt/``, a
+        known inconsistency in the upstream release, not something specific
+        to this mirror. This class matches on the intersection of available
+        IDs rather than raising on mismatch, and logs a warning naming how
+        many images were excluded.
+    """
+
+    GT_MARKER = "norain-"
+    DEGRADATION_MARKERS: Dict[str, str] = {
+        "raindrop": "rd-",
+        "rainstreak": "rain-",
+        "rainstreak_raindrop": "rd-rain-",
+    }
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        degradation: str = "rainstreak_raindrop",
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize RainDS dataset.
+
+        Args:
+            root_dir: Directory for one split
+            degradation: Which degraded category to pair against gt
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            ValueError: If degradation is not a recognized category, or no
+                matching gt/degraded pairs could be found
+            FileNotFoundError: If the gt or degradation directory is missing
+        """
+        if degradation not in self.DEGRADATION_MARKERS:
+            raise ValueError(
+                f"degradation must be one of {sorted(self.DEGRADATION_MARKERS)}, "
+                f"got {degradation!r}"
+            )
+
+        root_dir = Path(root_dir)
+        gt_dir = root_dir / "gt"
+        deg_dir = root_dir / degradation
+
+        self.transform = transform
+        self.extensions = extensions
+
+        try:
+            gt_entries = list(gt_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"gt directory not found: {gt_dir}") from e
+        except PermissionError as e:
+            raise PermissionError(f"Cannot read gt directory '{gt_dir}': {e}") from e
+
+        try:
+            deg_entries = list(deg_dir.iterdir())
+        except FileNotFoundError as e:
+            raise FileNotFoundError(
+                f"'{degradation}' directory not found: {deg_dir}"
+            ) from e
+        except PermissionError as e:
+            raise PermissionError(
+                f"Cannot read '{degradation}' directory '{deg_dir}': {e}"
+            ) from e
+
+        def _strip(stem: str, marker: str) -> str:
+            for pie_prefix in ("pie-", ""):
+                full = pie_prefix + marker
+                if stem.startswith(full):
+                    return pie_prefix + stem[len(full) :]
+            return stem
+
+        gt_by_id = {
+            _strip(f.stem, self.GT_MARKER): f
+            for f in gt_entries
+            if f.suffix.lower() in extensions
+        }
+        deg_by_id = {
+            _strip(f.stem, self.DEGRADATION_MARKERS[degradation]): f
+            for f in deg_entries
+            if f.suffix.lower() in extensions
+        }
+
+        common_ids_set = set(gt_by_id) & set(deg_by_id)
+        if not common_ids_set:
+            raise ValueError(
+                f"No matching gt/{degradation} pairs found under {root_dir}"
+            )
+
+        skipped = (set(gt_by_id) | set(deg_by_id)) - common_ids_set
+        if skipped:
+            logger.warning(
+                f"RainDSDataset: {len(skipped)} unmatched filename(s) excluded "
+                f"under {root_dir} ({degradation}), a known upstream naming "
+                "inconsistency, not specific to this mirror."
+            )
+
+        def _sort_key(image_id: str) -> Tuple[int, Union[int, str]]:
+            return (
+                (0, cast(Union[int, str], int(image_id)))
+                if image_id.isdigit()
+                else (1, image_id)
+            )
+
+        common_ids = sorted(common_ids_set, key=_sort_key)
+        self.rainy_files = [deg_by_id[i] for i in common_ids]
+        self.clean_files = [gt_by_id[i] for i in common_ids]
+
+        logger.info(
+            f"Loaded {len(self.rainy_files)} image pairs from RainDS ({degradation})"
+        )
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a degraded/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (degraded_tensor, clean_tensor)
         """
         rainy_img = Image.open(self.rainy_files[idx]).convert("RGB")
         clean_img = Image.open(self.clean_files[idx]).convert("RGB")
