@@ -11,7 +11,7 @@
   month        = jan,
   url          = {https://github.com/dronefreak/clearview},
   version      = {1.0.0},
-  note         = {A PyTorch framework for single-image deraining with comprehensive testing and CI/CD integration}
+  note         = {A PyTorch framework for single-image deraining}
 }
 
 % Alternative Formats
@@ -96,7 +96,7 @@
   url          = {https://proceedings.neurips.cc/paper/2019/hash/bdbca288fee7f92f2bfa9f7012727740-Abstract.html}
 }
 
-% Image Deraining Survey (if applicable to your work)
+% Rain100L/Rain100H, journal version
 @article{yang2020single,
   author       = {Yang, Wenhan and Tan, Robby T. and Feng, Jiashi and Liu, Jiaying and Guo, Zongming and Yan, Shuicheng},
   title        = {{Deep Joint Rain Detection and Removal from a Single Image}},
@@ -108,7 +108,7 @@
   doi          = {10.1109/TPAMI.2019.2920511}
 }
 
-% Example Rain Dataset Citation (Rain100L/Rain100H)
+% Rain100L/Rain100H, conference version
 @inproceedings{yang2017rain100,
   author       = {Yang, Wenhan and Tan, Robby T. and Feng, Jiashi and Liu, Jiaying and Guo, Zongming and Yan, Shuicheng},
   title        = {{Deep Joint Rain Detection and Removal from a Single Image}},
@@ -116,6 +116,47 @@
   year         = {2017},
   pages        = {1357--1366},
   doi          = {10.1109/CVPR.2017.183}
+}
+
+% Architectures in the ClearView model zoo
+@inproceedings{zamir2022restormer,
+  author       = {Zamir, Syed Waqas and Arora, Aditya and Khan, Salman and Hayat, Munawar and Khan, Fahad Shahbaz and Yang, Ming-Hsuan},
+  title        = {{Restormer: Efficient Transformer for High-Resolution Image Restoration}},
+  booktitle    = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year         = {2022},
+  pages        = {5728--5739}
+}
+
+@inproceedings{chen2022nafnet,
+  author       = {Chen, Liangyu and Chu, Xiaojie and Zhang, Xiangyu and Sun, Jian},
+  title        = {{Simple Baselines for Image Restoration}},
+  booktitle    = {European Conference on Computer Vision (ECCV)},
+  year         = {2022},
+  pages        = {17--33}
+}
+
+@inproceedings{sun2024histoformer,
+  author       = {Sun, Shangquan and Ren, Wenqi and Gao, Xinwei and Wang, Rui and Cao, Xiaochun},
+  title        = {{Restoring Images in Adverse Weather Conditions via Histogram Transformer}},
+  booktitle    = {European Conference on Computer Vision (ECCV)},
+  year         = {2024}
+}
+
+% Real-world rain datasets used in the mixed-domain recipe
+@inproceedings{wang2019spanet,
+  author       = {Wang, Tianyu and Yang, Xin and Xu, Ke and Chen, Shaozhe and Zhang, Qiang and Lau, Rynson W. H.},
+  title        = {{Spatial Attentive Single-Image Deraining with a High Quality Real Rain Dataset}},
+  booktitle    = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  year         = {2019},
+  pages        = {12270--12279}
+}
+
+@misc{li2022realrain1k,
+  author       = {Li, Wei and Zhang, Qiming and Zhang, Jing and Huang, Zhen and Tian, Xinmei and Tao, Dacheng},
+  title        = {{Toward Real-world Single Image Deraining: A New Benchmark and Beyond}},
+  year         = {2022},
+  eprint       = {2206.05514},
+  archivePrefix = {arXiv}
 }
 
 % Example usage in LaTeX:

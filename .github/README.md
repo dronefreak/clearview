@@ -11,7 +11,7 @@
 
   <!-- Tech Stack & Quality -->
   <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square" alt="Python">
+    <img src="https://img.shields.io/badge/Python-3.10+-blue?style=flat-square" alt="Python">
   </a>
   <a href="https://pytorch.org/">
     <img src="https://img.shields.io/badge/PyTorch-2.0+-red?style=flat-square" alt="PyTorch">
@@ -45,7 +45,7 @@ git clone https://github.com/dronefreak/clearview.git
 cd clearview
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt && pip install -e .
+pip install -e ".[metrics,hub]"   # or: pip install -r requirements.txt && pip install -e .
 ```
 
 ### Inference
@@ -92,7 +92,8 @@ SPA-Data, RealRain-1k-H/L, mildly oversampling the real-world sources) and
 selecting checkpoints against a blended validation metric across four of
 those sources, rather than optimizing for one benchmark, for a model that
 holds up reasonably across domains instead of maxing out a single dataset's
-quirks. See [`configs/mix/`](configs/mix/) for the exact recipe.
+quirks. See [`configs/mix/`](https://github.com/dronefreak/clearview/tree/main/configs/mix) for the exact recipe, per-model
+settings, and how to rebuild the dataset roots from the Hugging Face mirrors.
 
 ### Training Mix
 
@@ -164,7 +165,9 @@ In our own spot checks (both `net_g_real` and `net_g_best`), its visible effect 
 | RealRain-1k-L [[6]](#references)         | Real-world            | 42.35 / 0.989 | 41.17 / 0.987  | 40.64 / 0.986 | 38.04 / 0.980  | 36.52 / 0.978 |
 | AllWeather (rain+fog) [[7]](#references) | Cross-domain (stress) | 13.72 / 0.584 | 13.53 / 0.576  | 13.64 / 0.579 | 13.66 / 0.570  | 13.61 / 0.555 |
 
-Columns sorted highest to lowest by average PSNR across the 9 rain-only test sets (Restormer 35.10, NAFNet Large 34.16, NAFNet Mid 33.97, UNet 31.74, ResNet50-UNet 30.63). This is a curated subset, not the full model zoo, NAFNet (Small), ResNet18/34-UNet, and Histoformer are trained/evaluated too but omitted here for brevity, see their individual model cards (above) for full numbers. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), full per-image distributions and logs live under `runs/<model>/eval/<dataset>/`.
+Columns sorted highest to lowest by average PSNR across the 9 rain-only test sets (Restormer 35.10, NAFNet Large 34.16, NAFNet Mid 33.97, UNet 31.74, ResNet50-UNet 30.63). This is a curated subset, not the full model zoo, NAFNet (Small), ResNet18/34-UNet, and Histoformer are trained/evaluated too but omitted here for brevity, see their individual model cards (above) for full numbers. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), to reproduce any column, run [`configs/mix/eval_mixed.sh`](https://github.com/dronefreak/clearview/blob/main/configs/mix/eval_mixed.sh) on the published checkpoint.
+
+PSNR and SSIM are computed in RGB on the full-resolution output (clipped to [0, 1]), not on the Y channel used by many deraining papers, so they are not directly comparable to Y-channel numbers reported elsewhere.
 
 ---
 
@@ -174,7 +177,7 @@ Columns sorted highest to lowest by average PSNR across the 9 rain-only test set
 - **[DDN-Data / Rain1400](https://huggingface.co/datasets/dronefreak/DDN-Data)**: 12.6K train / 1.4K test
 - **[SPA-Data](https://huggingface.co/datasets/dronefreak/SPA-Data)**: real-world, video-derived rain/clean pairs
 - **[RealRain-1k-H/L](https://huggingface.co/datasets/dronefreak/RealRain-1k)**: real-world, heavy/light density tracks
-- **Custom**: Organize as `train/{rainy_image,ground_truth}`, or combine any of the above via [`--mix-config`](configs/mix/)
+- **Custom**: any folder pair of rainy/clean images with matching filenames, via `--dataset-type pair` and `--train-rainy`/`--train-clean`/`--val-rainy`/`--val-clean` (defaults `train/rainy`, `train/clean`, `val/rainy`, `val/clean` under `--data-dir`), or combine any of the above via [`--mix-config`](https://github.com/dronefreak/clearview/tree/main/configs/mix)
 
 ---
 
@@ -182,7 +185,9 @@ Columns sorted highest to lowest by average PSNR across the 9 rain-only test set
 
 ### Training
 
-Launch a single-GPU training run with an example command like the one below:
+Launch a single-GPU training run with an example command like the one below
+(per-model batch sizes and epoch budgets for the published checkpoints are in
+[`configs/mix/README.md`](https://github.com/dronefreak/clearview/blob/main/configs/mix/README.md)):
 
 ```bash
 clearview-train \
@@ -202,7 +207,9 @@ clearview-train \
 
 ### Evaluation
 
-Once training finishes, evaluate a checkpoint against a labeled test set:
+Once training finishes, evaluate a checkpoint against a labeled test set
+(images are evaluated at native resolution, so keep the default `--batch-size 1`
+when a set mixes image sizes):
 
 ```bash
 clearview-evaluate \
@@ -210,9 +217,13 @@ clearview-evaluate \
   --data-dir /path/to/rainy_image_dataset \
   --dataset-type rain1400 \
   --rainy-dir testing/rainy_image --clean-dir testing/ground_truth \
-  --batch-size 16 \
   --output-dir ./runs/rain_mixed_unet/test_eval
 ```
+
+Training writes a resumable `checkpoints/last.pth` every `--save-every` epochs
+(and `checkpoints/interrupted.pth` on Ctrl+C). Continue a run with
+`--resume <checkpoint>` and the same arguments: the LR schedule, EMA,
+best-checkpoint tracking and early-stopping patience all carry over.
 
 ---
 
@@ -233,7 +244,7 @@ clearview-evaluate \
 
 ## 🤝 Contribute
 
-PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md).
+PRs welcome! See [CONTRIBUTING.md](https://github.com/dronefreak/clearview/blob/main/.github/CONTRIBUTING.md).
 Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 
 ---
@@ -249,7 +260,7 @@ Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 }
 ```
 
-**License**: [Apache 2.0](LICENSE)
+**License**: [Apache 2.0](https://github.com/dronefreak/clearview/blob/main/LICENSE)
 **Author**: [Saumya Kumaar Saksena (@dronefreak)](https://github.com/dronefreak)
 
 ### References
@@ -259,12 +270,12 @@ Need help? Open an [Issue](https://github.com/dronefreak/clearview/issues).
 3. Zhang, Sindagi & Patel, _Image De-raining Using a Conditional Generative Adversarial Network_, IEEE TCSVT 2019 (Test1200).
 4. Fu et al., _Removing Rain from Single Images via a Deep Detail Network_, CVPR 2017 (Test2800 / DDN-Data / Rain1400).
 5. Wang et al., _Spatial Attentive Single-Image Deraining with a High Quality Real Rain Dataset_, CVPR 2019 (SPA-Data).
-6. Li et al., _RealRain-1k: A Large-Scale Dataset for Real-World Single Image Deraining_, arXiv:2206.05514, 2022.
+6. Li et al., _Toward Real-world Single Image Deraining: A New Benchmark and Beyond_, [arXiv:2206.05514](https://arxiv.org/abs/2206.05514), 2022 (RealRain-1k).
 7. Li et al., _Heavy Rain Image Restoration: Integrating Physics Model and Conditional Adversarial Learning_, CVPR 2019 (AllWeather rain+fog / Outdoor-Rain).
 8. Sun, Ren, Gao, Wang & Cao, _Restoring Images in Adverse Weather Conditions via Histogram Transformer_, ECCV 2024, [arXiv:2407.10172](https://arxiv.org/abs/2407.10172) (Histoformer, inference-only baseline).
 9. Zamir et al., _Restormer: Efficient Transformer for High-Resolution Image Restoration_, CVPR 2022, [arXiv:2111.09881](https://arxiv.org/abs/2111.09881).
 10. Ronneberger, Fischer & Brox, _U-Net: Convolutional Networks for Biomedical Image Segmentation_, MICCAI 2015, [arXiv:1505.04597](https://arxiv.org/abs/1505.04597).
 11. Chen, Chu, Zhang & Sun, _Simple Baselines for Image Restoration_, ECCV 2022, [arXiv:2204.04676](https://arxiv.org/abs/2204.04676) (NAFNet).
-12. He, Zhang, Ren & Sun, _Deep Residual Learning for Image Recognition_, CVPR 2016, [arXiv:1512.03385](https://arxiv.org/abs/1512.03385) (ResNet, used as the encoder backbone for ResNet34-UNet).
+12. He, Zhang, Ren & Sun, _Deep Residual Learning for Image Recognition_, CVPR 2016, [arXiv:1512.03385](https://arxiv.org/abs/1512.03385) (ResNet, used as the encoder backbone for the ResNet18/34/50-UNet models).
 
 ---

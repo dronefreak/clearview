@@ -1,421 +1,77 @@
-# Contributing to Image Deraining
+# Contributing to ClearView
 
-First off, thanks for taking the time to contribute! 🎉
+Thanks for taking the time to contribute! Bug reports, fixes, tests, docs
+and new datasets or architectures are all welcome. Participation is governed
+by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-The following is a set of guidelines for contributing to this project. These are mostly guidelines, not rules. Use your best judgment, and feel free to propose changes to this document in a pull request.
+## Reporting bugs and requesting features
 
-## Table of Contents
+Open an [issue](https://github.com/dronefreak/clearview/issues). For bugs,
+please include:
 
-- [Code of Conduct](#code-of-conduct)
-- [How Can I Contribute?](#how-can-i-contribute)
-- [Development Setup](#development-setup)
-- [Pull Request Process](#pull-request-process)
-- [Coding Standards](#coding-standards)
-- [Commit Messages](#commit-messages)
+- the exact command or code you ran, and the full error output
+- what you expected to happen instead
+- your environment: OS, Python, PyTorch and CUDA versions, GPU
 
-## Code of Conduct
+## Development setup
 
-This project and everyone participating in it is governed by our [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code.
-
-## How Can I Contribute?
-
-### Reporting Bugs
-
-Before creating bug reports, please check existing issues to avoid duplicates. When creating a bug report, include as many details as possible:
-
-- **Use a clear and descriptive title**
-- **Describe the exact steps to reproduce the problem**
-- **Provide specific examples** (code snippets, images, etc.)
-- **Describe the behavior you observed** and what you expected
-- **Include your environment details** (OS, Python version, PyTorch version, GPU)
-
-**Bug Report Template:**
-
-```markdown
-**Description:**
-A clear description of the bug.
-
-**To Reproduce:**
-Steps to reproduce the behavior:
-
-1. Run command '...'
-2. Use config '...'
-3. See error
-
-**Expected behavior:**
-What you expected to happen.
-
-**Environment:**
-
-- OS: [e.g., Ubuntu 22.04]
-- Python version: [e.g., 3.10]
-- PyTorch version: [e.g., 2.0.1]
-- CUDA version: [e.g., 11.8]
-- GPU: [e.g., RTX 3090]
-
-**Additional context:**
-Any other relevant information.
-```
-
-### Suggesting Enhancements
-
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion:
-
-- **Use a clear and descriptive title**
-- **Provide a detailed description** of the proposed functionality
-- **Explain why this enhancement would be useful**
-- **Include examples** of how it would be used
-
-### Contributing Code
-
-#### Good First Issues
-
-Look for issues labeled `good first issue` if you're new to the project. These are typically:
-
-- Documentation improvements
-- Simple bug fixes
-- Adding tests for existing functionality
-- Code cleanup and refactoring
-
-#### Areas That Need Help
-
-- **New architectures**: Implement Transformer-based or diffusion models
-- **Optimization**: Improve inference speed, reduce memory usage
-- **Documentation**: Tutorials, examples, API docs
-- **Testing**: Increase test coverage
-- **Datasets**: Add support for new datasets
-- **Deployment**: Docker, TensorRT, ONNX optimizations
-
-## Development Setup
-
-### 1. Fork and Clone
+ClearView requires Python 3.10 or newer.
 
 ```bash
-# Fork the repository on GitHub, then:
 git clone https://github.com/dronefreak/clearview.git
 cd clearview
+make setup-venv && source .venv/bin/activate
+make install-dev          # pip install -e ".[dev,metrics,hub]"
+make pre-commit-install   # ruff, mypy, prettier, markdownlint, ... on commit
+make test                 # the full suite runs on CPU in a few minutes
 ```
 
-### 2. Create a Virtual Environment
+Run `make help` to list every target.
 
-```bash
-# Using venv
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+## Making a change
 
-# Or using conda
-conda create -n deraining python=3.10
-conda activate deraining
+1. Branch from `main`: `feature/...`, `fix/...`, `docs/...`, `test/...`.
+2. Keep each pull request focused on one change.
+3. Add or update tests. Every bug fix should come with a test that fails
+   without the fix.
+4. Update the docs (README, `clearview/scripts/README.md`,
+   `configs/mix/README.md`) when behaviour or CLI flags change.
+5. Check locally before pushing:
+
+   ```bash
+   make lint format-check test
+   ```
+
+6. Open the pull request with a short description of what changed and why,
+   and link related issues (`Closes #123`).
+
+## Coding standards
+
+- **Formatting and linting**: [ruff](https://docs.astral.sh/ruff/)
+  (`make format`), 88-character lines.
+- **Type hints** on all public functions. mypy runs in pre-commit.
+- **Docstrings**: Google style (`Args:`, `Returns:`, `Raises:`).
+- **Comments** explain _why_, not _what_.
+- **Tests** live in `tests/test_*.py`, use pytest, and must run on CPU with
+  small synthetic inputs. Anything that needs a GPU, network access or an
+  optional package must skip cleanly without it (`pytest.mark.skipif`,
+  `pytest.importorskip`).
+
+## Commit messages
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
+(enforced by a `commit-msg` hook): one line, `type(optional scope): summary`.
+
+```text
+fix(training): restore LR scheduler state on --resume
+feat(data): add GT-RAIN dataset loader
+docs: document the RGB PSNR/SSIM evaluation protocol
+test: cover NumPy inputs in compute_ssim
 ```
 
-### 3. Install Dependencies
+Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`, `chore`.
 
-```bash
-# Install package in editable mode with dev dependencies
-pip install -e ".[dev]"
+## Questions
 
-# Or manually:
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-```
-
-### 4. Verify Installation
-
-```bash
-# Run tests
-pytest tests/
-
-# Check code formatting
-black --check src/ scripts/ tests/
-
-# Type checking
-mypy src/
-```
-
-## Pull Request Process
-
-### 1. Create a Branch
-
-```bash
-git checkout -b feature/your-feature-name
-# Or for bug fixes:
-git checkout -b fix/bug-description
-```
-
-Branch naming conventions:
-
-- `feature/` - New features
-- `fix/` - Bug fixes
-- `docs/` - Documentation changes
-- `refactor/` - Code refactoring
-- `test/` - Adding or updating tests
-
-### 2. Make Your Changes
-
-- Write clear, commented code
-- Follow the coding standards (see below)
-- Add tests for new functionality
-- Update documentation as needed
-
-### 3. Test Your Changes
-
-```bash
-# Run all tests
-pytest tests/
-
-# Run specific test file
-pytest tests/test_models.py
-
-# Check code coverage
-pytest --cov=src/deraining tests/
-
-# Test formatting
-black --check .
-isort --check .
-
-# Type checking
-mypy src/
-```
-
-### 4. Commit Your Changes
-
-```bash
-git add .
-git commit -m "feat: add attention mechanism to U-Net"
-# See commit message guidelines below
-```
-
-### 5. Push and Create PR
-
-```bash
-git push origin feature/your-feature-name
-```
-
-Then create a Pull Request on GitHub with:
-
-- **Clear title** describing the change
-- **Description** of what changed and why
-- **Link to related issues** (e.g., "Closes #123")
-- **Screenshots/examples** if relevant
-- **Checklist** confirming you've tested and documented
-
-**PR Template:**
-
-```markdown
-## Description
-
-Brief description of changes.
-
-## Related Issues
-
-Closes #(issue number)
-
-## Type of Change
-
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Breaking change
-- [ ] Documentation update
-
-## Testing
-
-- [ ] Tests pass locally
-- [ ] Added new tests for new features
-- [ ] Updated documentation
-
-## Screenshots (if applicable)
-
-Add before/after images if relevant.
-```
-
-### 6. Code Review
-
-- Be open to feedback and discussion
-- Make requested changes promptly
-- Keep the PR focused on a single change
-- Update your branch if main has changed: `git rebase main`
-
-## Coding Standards
-
-### Python Style
-
-We follow PEP 8 with some modifications:
-
-```python
-# Use black for formatting (line length: 88)
-black src/ scripts/ tests/
-
-# Use isort for import sorting
-isort src/ scripts/ tests/
-
-# Type hints for all functions
-def train_model(
-    model: nn.Module,
-    data_loader: DataLoader,
-    epochs: int = 100
-) -> Dict[str, float]:
-    """Train the deraining model.
-
-    Args:
-        model: PyTorch model to train
-        data_loader: DataLoader for training data
-        epochs: Number of training epochs
-
-    Returns:
-        Dictionary containing training metrics
-    """
-    pass
-```
-
-### Code Organization
-
-```python
-# Order of imports:
-# 1. Standard library
-import os
-from pathlib import Path
-from typing import Dict, Optional
-
-# 2. Third-party
-import torch
-import torch.nn as nn
-import numpy as np
-
-# 3. Local
-from clearview.models import UNet
-from clearview.losses import CombinedLoss
-```
-
-### Documentation
-
-- **Docstrings**: Use Google style docstrings
-- **Comments**: Explain _why_, not _what_
-- **Type hints**: Required for all public functions
-- **README updates**: Update if adding features
-
-Example docstring:
-
-```python
-def preprocess_image(
-    image: np.ndarray,
-    target_size: Tuple[int, int] = (512, 384),
-    normalize: bool = True
-) -> torch.Tensor:
-    """Preprocess image for model input.
-
-    Resizes, normalizes, and converts image to PyTorch tensor.
-
-    Args:
-        image: Input image as numpy array (H, W, C)
-        target_size: Target (height, width) for resizing
-        normalize: Whether to normalize to [0, 1] range
-
-    Returns:
-        Preprocessed image tensor (C, H, W)
-
-    Raises:
-        ValueError: If image shape is invalid
-
-    Example:
-        >>> img = cv2.imread('rainy.jpg')
-        >>> tensor = preprocess_image(img, target_size=(384, 512))
-        >>> print(tensor.shape)
-        torch.Size([3, 384, 512])
-    """
-    pass
-```
-
-### Testing
-
-- Write tests for all new functionality
-- Aim for >80% code coverage
-- Use pytest fixtures for common setup
-- Test edge cases and error conditions
-
-```python
-# tests/test_models.py
-import pytest
-import torch
-from clearview.models import UNet
-
-def test_unet_forward_pass():
-    """Test U-Net forward pass with various input sizes."""
-    model = UNet(in_channels=3, out_channels=3)
-
-    # Test multiple resolutions
-    for size in [(256, 256), (512, 384), (1024, 768)]:
-        x = torch.randn(2, 3, *size)
-        y = model(x)
-        assert y.shape == x.shape, f"Output shape mismatch for {size}"
-
-def test_unet_invalid_input():
-    """Test U-Net handles invalid inputs gracefully."""
-    model = UNet(in_channels=3, out_channels=3)
-
-    with pytest.raises(ValueError):
-        # Should fail with wrong number of channels
-        x = torch.randn(2, 4, 256, 256)
-        model(x)
-```
-
-## Commit Messages
-
-We follow [Conventional Commits](https://www.conventionalcommits.org/):
-
-```html
-<type
-  >[optional scope]:
-  <description> [optional body] [optional footer(s)]</description></type
->
-```
-
-### Types
-
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, no logic change)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks (dependencies, configs)
-- `perf`: Performance improvements
-
-### Examples
-
-```bash
-feat: add Transformer-based architecture option
-
-feat(models): implement attention U-Net with configurable gates
-
-fix: resolve CUDA out of memory during training
-
-fix(data): handle grayscale images in dataset loader
-
-docs: add training tutorial with examples
-
-docs(api): update docstrings for loss functions
-
-test: add unit tests for perceptual loss
-
-refactor: simplify data augmentation pipeline
-
-perf: optimize inference speed using torch.jit
-
-chore: update PyTorch to 2.0.1
-```
-
-## Questions?
-
-- **General questions**: Open a [GitHub Discussion](https://github.com/dronefreak/clearview/discussions)
-- **Bug reports**: Open an [Issue](https://github.com/dronefreak/clearview/issues)
-- **Feature requests**: Open an [Issue](https://github.com/dronefreak/clearview/issues) with `enhancement` label
-
-## Recognition
-
-Contributors will be recognized in:
-
-- The main README.md
-- Release notes for features they contribute
-- GitHub's contributor graph
-
-Thank you for contributing! 🙏
+Open a [discussion](https://github.com/dronefreak/clearview/discussions)
+or an [issue](https://github.com/dronefreak/clearview/issues).

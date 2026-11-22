@@ -20,14 +20,13 @@ identifiers:
 repository-code: 'https://github.com/dronefreak/clearview'
 url: 'https://github.com/dronefreak/clearview'
 abstract: >-
-  ClearView is a PyTorch-based deep learning framework for
-  single-image deraining. It provides modular implementations
-  of state-of-the-art deraining models including U-Net and
-  ResNet-based architectures, along with comprehensive loss
-  functions (perceptual, edge, SSIM) and evaluation metrics
-  (PSNR, SSIM). The framework emphasizes reproducibility,
-  extensive testing (280+ tests, 95% coverage), and production
-  readiness with CI/CD integration.
+  ClearView is a PyTorch framework for single-image deraining. It provides
+  U-Net, Attention U-Net, ResNet-UNet, NAFNet, Restormer and Histoformer
+  architectures, a library of pixel, structural, edge, frequency and
+  perceptual losses, full-reference and no-reference evaluation metrics,
+  and a mixed-domain training recipe that blends synthetic and real-world
+  rain datasets. Trained checkpoints for the model zoo are published on
+  the Hugging Face Hub.
 keywords:
   - image deraining
   - deep learning
@@ -36,8 +35,8 @@ keywords:
   - image restoration
   - rain removal
   - u-net
-  - resnet
-  - perceptual loss
+  - nafnet
+  - restormer
   - image processing
 license: Apache-2.0
 version: 1.0.0

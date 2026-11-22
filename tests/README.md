@@ -1,211 +1,44 @@
-# ClearView Test Suite
+# ClearView test suite
 
-This directory contains comprehensive unit tests and integration tests for the ClearView image deraining framework.
+700+ pytest tests covering models, losses, data loading, metrics, the
+training loop and all three CLI scripts. The whole suite runs on CPU in a
+few minutes using small synthetic images, with no datasets or downloads
+needed. Tests that need CUDA or an optional package (`lpips`, `piq`,
+`scipy`, `scikit-image`) skip cleanly when it is missing.
 
-## Test Structure
-
-```bash
-tests/
-├── conftest.py              # Shared pytest fixtures
-├── test_models.py           # Tests for neural network models and building blocks
-├── test_losses.py           # Tests for loss functions
-├── test_data.py            # Tests for data loading and datasets
-├── test_utils.py           # Tests for utility functions
-├── test_integration.py     # End-to-end integration tests
-└── README.md              # This file
-```
-
-## Running Tests
-
-### Prerequisites
-
-Install the project with development dependencies:
+## Running
 
 ```bash
-pip install -e ".[dev]"
-```
+pip install -e ".[dev,metrics]"
 
-Or install just the test dependencies:
-
-```bash
-pip install pytest pytest-cov
-pip install -r requirements.txt
-```
-
-### Run All Tests
-
-```bash
-pytest tests/
-```
-
-### Run Specific Test Files
-
-```bash
-# Test models
-pytest tests/test_models.py
-
-# Test losses
-pytest tests/test_losses.py
-
-# Test data pipeline
-pytest tests/test_data.py
-
-# Test utilities
-pytest tests/test_utils.py
-
-# Test integration
-pytest tests/test_integration.py
-```
-
-### Run with Coverage
-
-```bash
+pytest tests/                                   # everything
+pytest tests/test_trainer.py                    # one file
+pytest tests/test_trainer.py::TestTrainerResume # one class
 pytest tests/ --cov=clearview --cov-report=term-missing
 ```
 
-### Run Specific Test Classes or Methods
+`make test` and `make test-cov` wrap the first and last commands.
 
-```bash
-# Run a specific test class
-pytest tests/test_models.py::TestUNet
+## Layout
 
-# Run a specific test method
-pytest tests/test_models.py::TestUNet::test_forward_pass
-```
+| Area            | Files                                                                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Models          | `test_models.py` (UNet, Attention UNet, building blocks), `test_resnet_unet.py`, `test_nafnet.py`, `test_restormer.py`, `test_histoformer.py`                                  |
+| Losses          | `test_losses.py`, `test_perceptual.py`, `test_edge.py`, `test_frequency.py`, `test_adversarial.py`                                                                             |
+| Data            | `test_data.py` (pair/folder/Rain100 datasets, transforms), `test_new_datasets.py` (Rain13K, DDN-Data, DID-Data, SPA-Data, GT-RAIN, RainDrop, RainDS, NTIRE haze, MixedDataset) |
+| Metrics & utils | `test_metrics.py`, `test_niqe.py`, `test_utils.py`, `test_checkpoint.py`, `test_visualization.py`                                                                              |
+| Training        | `test_trainer.py` (EMA, accumulation, resume, interrupts), `test_ema.py`, `test_schedulers.py`                                                                                 |
+| CLI scripts     | `test_train_cli.py`, `test_train_script.py`, `test_train_mix_config.py`, `test_evaluate_script.py`, `test_inference_script.py`                                                 |
+| End to end      | `test_integration.py`                                                                                                                                                          |
 
-### Verbose Output
+Shared fixtures live in `conftest.py`: `device`, `sample_image_tensor`,
+`sample_image_pair`, `sample_batch`, `sample_numpy_image`,
+`sample_pil_image`, `temp_image_file`, `temp_dir`, `sample_dataset_dir`,
+`model_config`, `training_config`.
 
-```bash
-pytest tests/ -v
-```
+## Writing tests
 
-## Test Coverage
-
-The test suite covers:
-
-### Unit Tests
-
-- **Model Building Blocks** (`test_models.py`)
-
-  - ConvBlock with different activations and configurations
-  - DoubleConv blocks
-  - DownBlock and UpBlock for encoder/decoder
-  - AttentionGate mechanism
-  - UNet, UNetSmall, UNetLarge architectures
-
-- **Loss Functions** (`test_losses.py`)
-
-  - Pixel-wise losses: L1, L2, MAE, MSE, Charbonnier
-  - Structural losses: SSIM, Multi-Scale SSIM
-  - Edge-based losses
-  - Perceptual losses
-  - Combined loss functions
-
-- **Data Pipeline** (`test_data.py`)
-
-  - ImagePairDataset for paired rainy/clean images
-  - SingleFolderDataset for inference
-  - Rain100Dataset for benchmark datasets
-  - DataLoader integration
-  - Different image formats and extensions
-
-- **Utility Functions** (`test_utils.py`)
-  - Image normalization and denormalization
-  - RGB to grayscale conversion
-  - Tensor-NumPy conversion
-  - Metrics: PSNR, SSIM, MAE, MSE
-  - Checkpoint save/load
-  - Image processing utilities
-
-### Integration Tests
-
-- **End-to-End Workflows** (`test_integration.py`)
-  - Full training pipeline
-  - Model save and load
-  - Batch inference
-  - Metrics evaluation during training
-  - Training with different loss functions
-  - Gradient flow verification
-  - CPU and GPU testing
-
-## Continuous Integration
-
-These tests are designed to run in CI/CD pipelines. The test suite includes:
-
-- Fast unit tests for individual components
-- Integration tests for end-to-end workflows
-- GPU tests (skipped if CUDA is not available)
-- Comprehensive coverage reports
-
-## Writing New Tests
-
-When adding new features, please add corresponding tests:
-
-1. **Unit tests**: Test individual functions/classes in isolation
-2. **Integration tests**: Test how components work together
-3. **Fixtures**: Use shared fixtures from `conftest.py`
-4. **Type hints**: All test functions should have proper type hints
-5. **Docstrings**: Each test should have a descriptive docstring
-
-Example:
-
-```python
-def test_new_feature(self, sample_dataset_dir: Path) -> None:
-    """Test the new feature with sample data."""
-    # Test implementation
-    assert result == expected
-```
-
-## Test Fixtures
-
-Common fixtures available in `conftest.py`:
-
-- `device`: PyTorch device (CPU or CUDA)
-- `sample_image_tensor`: Sample 3-channel image tensor
-- `sample_image_pair`: Pair of rainy/clean image tensors
-- `sample_batch`: Batch of image pairs
-- `sample_numpy_image`: NumPy image array
-- `sample_pil_image`: PIL Image
-- `temp_image_file`: Temporary image file
-- `temp_dir`: Temporary directory
-- `sample_dataset_dir`: Sample dataset with image pairs
-- `model_config`: Default model configuration
-- `training_config`: Default training configuration
-
-## Troubleshooting
-
-### Import Errors
-
-If you get import errors, make sure the package is installed in editable mode:
-
-```bash
-pip install -e .
-```
-
-### Missing Dependencies
-
-Install all dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-### CUDA Tests Failing
-
-GPU tests are automatically skipped if CUDA is not available. To run GPU tests, ensure you have:
-
-- NVIDIA GPU
-- CUDA toolkit installed
-- PyTorch with CUDA support
-
-## Contributing
-
-When contributing tests:
-
-1. Follow the existing test structure
-2. Use descriptive test names
-3. Add docstrings to all tests
-4. Use type hints
-5. Keep tests focused and independent
-6. Use fixtures for common setup
-7. Ensure tests are deterministic
+- Put new tests in `tests/test_<area>.py`, with a type-hinted function and
+  a one-line docstring for each test.
+- Keep inputs tiny (16 to 64 px) and runs deterministic.
+- Every bug fix should come with a test that fails without the fix.

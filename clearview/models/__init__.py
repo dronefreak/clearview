@@ -1,7 +1,8 @@
 """Neural network models for image deraining.
 
-This module provides various encoder-decoder architectures optimized for
-image restoration tasks, including U-Net and attention-based variants.
+Encoder-decoder and transformer architectures for image restoration: U-Net,
+Attention U-Net, ResNet-UNet, NAFNet, Restormer and Histoformer. Build any of
+them by name with :func:`get_model`; :func:`list_models` lists the names.
 """
 
 from typing import Any, Callable, Dict, List, Type
@@ -69,7 +70,7 @@ def get_model(name: str, **kwargs: Any) -> BaseModel:
 
     Example:
         >>> model = get_model('unet', in_channels=3, out_channels=3)
-        >>> model = get_model('attention_unet', encoder='resnet34', pretrained=True)
+        >>> model = get_model('resnet_unet', backbone='resnet50', pretrained=False)
     """
     name_lower = name.lower()
 
@@ -88,9 +89,8 @@ def list_models() -> List[str]:
         List of registered model names
 
     Example:
-        >>> models = list_models()
-        >>> print(models)
-        ['unet', 'attention_unet', 'attn_unet']
+        >>> 'nafnet' in list_models()
+        True
     """
     return sorted(_MODEL_REGISTRY.keys())
 

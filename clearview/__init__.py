@@ -1,13 +1,14 @@
-"""ClearView: Neural Image Deraining for Autonomous Systems.
+"""ClearView: single-image deraining with PyTorch.
 
-A modern PyTorch implementation for removing rain, snow, and adverse weather
-effects from images using deep learning. Designed for production use in
-autonomous driving, surveillance systems, and image restoration.
+Models (U-Net variants, ResNet-UNet, NAFNet, Restormer, Histoformer), losses,
+metrics, datasets and a training loop for removing rain from images.
 
 Example:
-    >>> from clearview import DerainingModel
-    >>> model = DerainingModel.from_pretrained('unet_attention')
-    >>> clean_image = model.process(rainy_image)
+    >>> from clearview.api import DerainingModel
+    >>> model = DerainingModel.from_pretrained(
+    ...     'nafnet', weights='clearview-derain-nafnet.pth'
+    ... )
+    >>> clean = model.process('rainy.jpg', output_path='derained.jpg')
 """
 
 __author__ = "Saumya Kumaar Saksena"
