@@ -4,9 +4,11 @@
 import argparse
 import json
 import logging
+import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, cast
 
+import numpy as np
 import torch
 import torch.nn as nn
 import yaml
@@ -43,8 +45,8 @@ from clearview.utils import plot_training_curves, setup_logging
 logger = logging.getLogger(__name__)
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Parse command-line arguments (``argv`` defaults to ``sys.argv[1:]``)."""
     parser = argparse.ArgumentParser(
         description="Train image deraining models",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -117,7 +119,8 @@ def parse_args() -> argparse.Namespace:
         "given, this replaces how the *training* dataset is built; "
         "--data-dir/--dataset-type/--val-split etc. are still used as-is "
         "for the *validation* dataset unless --val-mix-config is also "
-        "given. See configs/mix/ for example files.",
+        "given. Relative data_dir entries in the file resolve against "
+        "--data-dir. See configs/mix/ for example files.",
     )
     data_group.add_argument(
         "--mix-sampler",
@@ -163,14 +166,16 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default="resnet34",
         choices=["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"],
-        help="ResNet backbone (only used with resnet_unet model)",
+        help="ResNet backbone (only used with the generic resnet_unet model; "
+        "resnet18_unet etc. fix the backbone by name)",
     )
 
     model_group.add_argument(
         "--pretrained",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         default=True,
-        help="Use ImageNet pretrained weights for ResNet backbone",
+        help="Initialize the ResNet encoder from ImageNet weights (ResNet-UNet "
+        "models only). Use --no-pretrained to train the encoder from scratch.",
     )
 
     model_group.add_argument(
@@ -242,8 +247,8 @@ def parse_args() -> argparse.Namespace:
         help="Arbitrary loss combination as a JSON object mapping loss "
         "names (from clearview.losses.CombinedLoss's registry — e.g. "
         "l1, l2, charbonnier, ssim, ms_ssim, edge, sobel, laplacian, "
-        "perceptual, dists, fft, focal_frequency, wavelet, color, "
-        "adversarial) to their keyword arguments, each including a "
+        "perceptual, dists, fft, focal_frequency, wavelet, color) to "
+        "their keyword arguments, each including a "
         "'weight'. Example: "
         '\'{"l1": {"weight": 1.0}, "ssim": {"weight": 0.5}, '
         '"dists": {"weight": 0.1}}\'. '
@@ -420,7 +425,12 @@ def parse_args() -> argparse.Namespace:
         help="Output directory for checkpoints and logs",
     )
     output_group.add_argument(
-        "--save-every", type=int, default=10, help="Save checkpoint every N epochs"
+        "--save-every",
+        type=int,
+        default=10,
+        help="Save a full resumable checkpoint (model, optimizer, LR "
+        "scheduler, EMA, callback state) to checkpoints/last.pth every N "
+        "epochs, overwriting it each time. 0 disables it.",
     )
 
     # Resuming
@@ -433,7 +443,10 @@ def parse_args() -> argparse.Namespace:
         "--config",
         type=str,
         default=None,
-        help="Path to YAML config file (overrides CLI args)",
+        help="Path to a YAML file of argument values (keys are the long "
+        "option names, dashes or underscores, e.g. 'batch_size: 16'). "
+        "Values replace the built-in defaults; options given explicitly "
+        "on the command line still take precedence over the file.",
     )
 
     # Device
@@ -445,21 +458,41 @@ def parse_args() -> argparse.Namespace:
         help="Device to train on",
     )
 
-    args = parser.parse_args()
+    return _parse_with_config(parser, argv)
 
-    # Load config file if provided
-    if args.config is not None:
-        import yaml
 
-        with open(args.config) as f:
-            config = yaml.safe_load(f)
+def _parse_with_config(
+    parser: argparse.ArgumentParser, argv: Optional[List[str]] = None
+) -> argparse.Namespace:
+    """Parse ``argv``, layering an optional ``--config`` YAML file in between.
 
-        # Update args with config (CLI args take precedence)
-        for key, value in config.items():
-            if not hasattr(args, key) or getattr(args, key) is None:
-                setattr(args, key.replace("-", "_"), value)
+    Precedence, lowest to highest: built-in defaults, values from the
+    ``--config`` file, options given explicitly on the command line.
+    Unknown keys in the file are an error rather than silently ignored.
+    """
+    pre_parser = argparse.ArgumentParser(add_help=False)
+    pre_parser.add_argument("--config", type=str, default=None)
+    pre_args, _ = pre_parser.parse_known_args(argv)
 
-    return args
+    if pre_args.config is not None:
+        with open(pre_args.config) as f:
+            config = yaml.safe_load(f) or {}
+        if not isinstance(config, dict):
+            parser.error(f"--config file {pre_args.config!r} must be a mapping")
+
+        dests = {action.dest: action for action in parser._actions}
+        normalized = {str(k).replace("-", "_"): v for k, v in config.items()}
+        unknown = sorted(set(normalized) - set(dests))
+        if unknown:
+            parser.error(f"Unknown keys in --config file: {', '.join(unknown)}")
+
+        # A required option supplied by the config file no longer has to
+        # be repeated on the command line.
+        for dest in normalized:
+            dests[dest].required = False
+        parser.set_defaults(**normalized)
+
+    return parser.parse_args(argv)
 
 
 def _build_dataset(
@@ -502,7 +535,9 @@ def _load_mix_config(path: str) -> List[Dict[str, Any]]:
 
         sources:
           - dataset_type: pair       # pair | rain100 | rain1400 | spa-data
-            data_dir: /path/to/source
+            data_dir: rain13k/train  # relative paths resolve against
+                                      # --data-dir; absolute paths are
+                                      # used as-is
             rainy_dir: input         # pair/rain1400 only
             clean_dir: target        # pair/rain1400 only
             split: train             # spa-data only
@@ -542,7 +577,17 @@ def _load_mix_config(path: str) -> List[Dict[str, Any]]:
     return cast(List[Dict[str, Any]], sources)
 
 
-def _build_mixed_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
+def _resolve_data_dir(data_dir: str, base_dir: Optional[Path]) -> Path:
+    """Resolve a mix-config ``data_dir`` against ``base_dir`` if it is relative."""
+    path = Path(data_dir).expanduser()
+    if path.is_absolute() or base_dir is None:
+        return path
+    return base_dir / path
+
+
+def _build_mixed_dataset(
+    mix_config_path: str, transform: Any, base_dir: Optional[Path] = None
+) -> MixedDataset:
     """Build a MixedDataset from a --mix-config/--val-mix-config YAML file.
 
     Used for both the training side (--mix-config, optionally with
@@ -550,6 +595,10 @@ def _build_mixed_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
     (--val-mix-config, always a single unweighted deterministic pass) --
     the dataset-building logic is identical either way, only what the
     caller does with the result (attach a sampler or not) differs.
+
+    A source's ``data_dir`` that is a relative path is resolved against
+    ``base_dir`` (``--data-dir``), so one config file works on any machine
+    by pointing ``--data-dir`` at the local dataset root.
     """
     sources = _load_mix_config(mix_config_path)
 
@@ -558,7 +607,7 @@ def _build_mixed_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
     for source in sources:
         dataset = _build_dataset(
             source.get("dataset_type", "pair"),
-            Path(source["data_dir"]),
+            _resolve_data_dir(source["data_dir"], base_dir),
             transform,
             rainy_dir=source.get("rainy_dir"),
             clean_dir=source.get("clean_dir"),
@@ -584,11 +633,6 @@ def _build_mixed_dataset(mix_config_path: str, transform: Any) -> MixedDataset:
 def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     """Setup data loaders."""
     data_dir = Path(args.data_dir)
-    if args.mix_config is not None and args.val_mix_config is not None:
-        logger.info(
-            "Both --mix-config and --val-mix-config given: "
-            "--data-dir/--dataset-type are unused."
-        )
 
     # Training transforms
     train_transform = get_train_transforms(
@@ -605,7 +649,9 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     train_sampler: Optional[WeightedRandomSampler] = None
     if args.mix_config is not None:
         logger.info(f"Building mixed training dataset from {args.mix_config}")
-        train_dataset: Dataset = _build_mixed_dataset(args.mix_config, train_transform)
+        train_dataset: Dataset = _build_mixed_dataset(
+            args.mix_config, train_transform, base_dir=data_dir
+        )
         if args.mix_sampler:
             train_sampler = WeightedRandomSampler(
                 cast(MixedDataset, train_dataset).sample_weights(),
@@ -628,7 +674,9 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
     # over the concatenation, no sampler/oversampling involved.
     if args.val_mix_config is not None:
         logger.info(f"Building mixed validation dataset from {args.val_mix_config}")
-        val_dataset = _build_mixed_dataset(args.val_mix_config, val_transform)
+        val_dataset = _build_mixed_dataset(
+            args.val_mix_config, val_transform, base_dir=data_dir
+        )
     else:
         val_dataset = _build_dataset(
             args.dataset_type,
@@ -665,9 +713,16 @@ def setup_data(args: argparse.Namespace) -> Tuple[DataLoader, DataLoader]:
 
 def setup_model(args: argparse.Namespace) -> nn.Module:
     """Setup model."""
-    model = get_model(
-        args.model, in_channels=args.in_channels, out_channels=args.out_channels
-    )
+    model_kwargs: Dict[str, Any] = {
+        "in_channels": args.in_channels,
+        "out_channels": args.out_channels,
+    }
+    # --pretrained/--backbone only apply to the ResNet-UNet family.
+    if args.model.startswith("resnet"):
+        model_kwargs["pretrained"] = args.pretrained
+        if args.model == "resnet_unet":
+            model_kwargs["backbone"] = args.backbone
+    model = get_model(args.model, **model_kwargs)
 
     if args.freeze_encoder and hasattr(model, "freeze_encoder"):
         model.freeze_encoder()
@@ -815,6 +870,7 @@ def setup_scheduler(
         return None, None
 
     monitor: Optional[str]
+    scheduler: Any
     if args.scheduler == "plateau":
         scheduler = ReduceLROnPlateau(
             optimizer,
@@ -836,15 +892,13 @@ def setup_scheduler(
                 f"warmup (warmup_start_lr={args.warmup_start_lr})"
             )
         else:
-            scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, verbose=True)
+            scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs)
         monitor = None
     elif args.scheduler == "step":
-        scheduler = StepLR(optimizer, step_size=30, gamma=0.1, verbose=True)
+        scheduler = StepLR(optimizer, step_size=30, gamma=0.1)
         monitor = None
     elif args.scheduler == "multistep":
-        scheduler = MultiStepLR(
-            optimizer, milestones=[30, 60, 90], gamma=0.1, verbose=True
-        )
+        scheduler = MultiStepLR(optimizer, milestones=[30, 60, 90], gamma=0.1)
         monitor = None
     else:
         raise ValueError(f"Unknown scheduler: {args.scheduler}")
@@ -858,7 +912,11 @@ def main() -> None:
     """Main training function."""
     args = parse_args()
 
-    # Set random seed
+    # Seed every RNG the pipeline uses: torch (model init, DataLoader
+    # shuffling/sampling and its per-worker seeds), Python's `random` (crop
+    # positions, flips, rotations in clearview.data.transforms), and NumPy.
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
     # Create output directory
@@ -991,6 +1049,8 @@ def main() -> None:
             val_loader=val_loader,
             epochs=args.epochs,
             start_epoch=start_epoch,
+            save_every=args.save_every,
+            last_checkpoint_path=output_dir / "checkpoints" / "last.pth",
         )
 
         # Save final checkpoint
@@ -1010,6 +1070,9 @@ def main() -> None:
         logger.info("=" * 80)
 
     except KeyboardInterrupt:
+        # Trainer.fit() re-raises Ctrl+C after its own cleanup, so this
+        # resumable checkpoint (raw weights, optimizer, scheduler, EMA and
+        # callback state) is what --resume should be pointed at.
         logger.info("\nTraining interrupted by user")
         trainer.save_checkpoint(output_dir / "checkpoints" / "interrupted.pth")
         logger.info(

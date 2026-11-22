@@ -128,6 +128,35 @@ class TestBuildDataset:
 class TestBuildMixedDataset:
     """Tests for _build_mixed_dataset()."""
 
+    def test_relative_data_dir_resolves_against_base_dir(self, tmp_path: Path) -> None:
+        """Relative data_dir entries are looked up under base_dir (--data-dir)."""
+        root = tmp_path / "datasets"
+        _make_pair_source(root / "rain13k" / "train", 3)
+        absolute = _make_pair_source(tmp_path / "elsewhere", 2)
+
+        config_path = tmp_path / "mix.yaml"
+        config_path.write_text(
+            yaml.dump(
+                {
+                    "sources": [
+                        {
+                            "data_dir": "rain13k/train",
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                        {
+                            "data_dir": str(absolute),
+                            "rainy_dir": "input",
+                            "clean_dir": "target",
+                        },
+                    ]
+                }
+            )
+        )
+
+        mixed = _build_mixed_dataset(str(config_path), None, base_dir=root)
+        assert len(mixed) == 5
+
     def test_combines_sources_with_configured_weights(self, tmp_path: Path) -> None:
         """Test that sources are combined into a MixedDataset with the
         configured per-source weights."""
