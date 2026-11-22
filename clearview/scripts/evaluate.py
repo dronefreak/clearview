@@ -46,7 +46,7 @@ def _filter_available_metrics(metrics: List[str]) -> List[str]:
         "lpips": "lpips",
         "dists": "piq",
         "brisque": "piq",
-        "niqe": None,  # pure-numpy, no optional dependency
+        "niqe": "scipy",  # NIQE's feature fitting uses scipy.special.gamma
     }
 
     available = []
@@ -120,7 +120,8 @@ def parse_args() -> argparse.Namespace:
         help="Metrics to compute and log. Defaults to every metric "
         f"implemented in clearview.utils.metrics (currently: {ALL_METRICS}). "
         "'lpips'/'dists'/'brisque' require the optional 'lpips'/'piq' "
-        "packages and are skipped with a warning if unavailable. 'niqe' "
+        "packages, and 'niqe' requires 'scipy'; each is skipped with a "
+        "warning if its package is unavailable. 'niqe' "
         "fits a reference model from a sample of this dataset's clean "
         "images (see --niqe-fit-samples). 'rain_removal_rate' uses the "
         "rainy input image automatically.",

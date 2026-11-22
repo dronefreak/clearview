@@ -72,6 +72,14 @@ class DerainingModel:
             ...     weights='checkpoints/best_model.pth'
             ... )
         """
+        # ResNet-UNet encoders default to ImageNet initialization, which
+        # downloads torchvision weights. When a checkpoint is given those
+        # weights are overwritten immediately, so skip the download (this
+        # also keeps offline inference working). Callers can still pass
+        # pretrained=... explicitly.
+        if weights is not None and model_name.lower().startswith("resnet"):
+            model_kwargs.setdefault("pretrained", False)
+
         # Create model
         model = get_model(model_name, **model_kwargs)
 
@@ -79,7 +87,9 @@ class DerainingModel:
         if weights is not None:
             weights = Path(weights)
             if weights.exists():
-                checkpoint = torch.load(weights, map_location=device)
+                # weights_only=True: refuse arbitrary pickled objects (the
+                # default only became safe in PyTorch 2.6).
+                checkpoint = torch.load(weights, map_location=device, weights_only=True)
 
                 # Handle different checkpoint formats. "params" is the
                 # official Histoformer checkpoint's key, not a ClearView

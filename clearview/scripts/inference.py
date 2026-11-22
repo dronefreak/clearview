@@ -105,7 +105,16 @@ def parse_args() -> argparse.Namespace:
         "also saved to '<output-dir>/quality_metrics.json'.",
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # The input and output groups are independent, so argparse alone
+    # accepts mismatched pairs like --input + --output-dir.
+    if args.input is not None and args.output is None:
+        parser.error("--input requires --output (use --input-dir with --output-dir)")
+    if args.input_dir is not None and args.output_dir is None:
+        parser.error("--input-dir requires --output-dir (use --input with --output)")
+
+    return args
 
 
 def get_image_files(

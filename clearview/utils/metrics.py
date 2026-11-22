@@ -149,8 +149,8 @@ def compute_ssim(
             return ssim_val.item()
         return ssim_val
     else:
-        if not isinstance(target, torch.Tensor):
-            raise TypeError(f"Expected torch.Tensor target, got {type(target)}")
+        if not isinstance(target, np.ndarray):
+            raise TypeError(f"Expected np.ndarray target, got {type(target)}")
         # NumPy implementation (simplified)
         try:
             from skimage.metrics import structural_similarity

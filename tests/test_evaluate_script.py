@@ -69,6 +69,21 @@ class TestFilterAvailableMetrics:
 
         assert result == ["psnr", "mae"]
 
+    def test_niqe_skipped_without_scipy(self, monkeypatch) -> None:
+        """NIQE needs scipy, so it is dropped (not crashed on) without it."""
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "scipy":
+                raise ImportError("simulated missing scipy")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", fake_import)
+
+        assert _filter_available_metrics(["psnr", "niqe"]) == ["psnr"]
+
 
 class TestEvaluateLoop:
     """Tests for the evaluate() function using a tiny model/dataset."""

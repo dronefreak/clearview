@@ -210,3 +210,55 @@ class TestProcessVideo:
 
         with pytest.raises(ValueError, match="Cannot open video file"):
             process_video(model=model, input_path=bogus_path, output_path=output_path)
+
+
+class TestParseArgsPairing:
+    """--input must pair with --output, and --input-dir with --output-dir."""
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--input", "a.jpg", "--output-dir", "out"],
+            ["--input-dir", "in", "--output", "b.jpg"],
+        ],
+    )
+    def test_mismatched_pairs_rejected(self, argv, monkeypatch) -> None:
+        """Mismatched input/output modes exit with a usage error."""
+        import sys
+
+        from clearview.scripts.inference import parse_args
+
+        monkeypatch.setattr(
+            sys, "argv", ["clearview-inference", "--weights", "w.pth", *argv]
+        )
+        with pytest.raises(SystemExit):
+            parse_args()
+
+
+class TestFromPretrainedSkipsImageNetDownload:
+    """Loading a checkpoint must not first fetch ImageNet encoder weights."""
+
+    def test_resnet_weights_load_with_pretrained_false(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """from_pretrained(weights=...) builds ResNet-UNets with pretrained=False."""
+        import torch
+
+        import clearview.api as api
+
+        seen = {}
+        real_get_model = api.get_model
+
+        def recording_get_model(name, **kwargs):
+            seen.update(kwargs)
+            return real_get_model(name, **kwargs)
+
+        monkeypatch.setattr(api, "get_model", recording_get_model)
+
+        weights = tmp_path / "w.pth"
+        torch.save(
+            real_get_model("resnet18_unet", pretrained=False).state_dict(), weights
+        )
+        DerainingModel.from_pretrained("resnet18_unet", weights=weights, device="cpu")
+
+        assert seen["pretrained"] is False

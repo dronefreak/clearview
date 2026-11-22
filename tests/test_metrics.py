@@ -21,6 +21,7 @@ from clearview.utils.metrics import (
     compute_mse,
     compute_psnr,
     compute_rain_removal_rate,
+    compute_ssim,
 )
 
 
@@ -118,6 +119,36 @@ class TestComputePSNR:
         psnr2 = compute_psnr(pred, target)
 
         assert psnr1 == psnr2
+
+
+class TestComputeSSIM:
+    """Tests for compute_ssim (torch and NumPy paths)."""
+
+    def test_torch_identical_is_one(self) -> None:
+        """SSIM of an image with itself is 1."""
+        img = torch.rand(2, 3, 32, 32)
+        assert compute_ssim(img, img) == pytest.approx(1.0, abs=1e-4)
+
+    def test_numpy_hwc_identical_is_one(self) -> None:
+        """The NumPy path accepts (H, W, C) arrays."""
+        img = np.random.rand(32, 32, 3).astype(np.float32)
+        assert compute_ssim(img, img) == pytest.approx(1.0, abs=1e-4)
+
+    def test_numpy_batch_matches_torch(self) -> None:
+        """NumPy batch input gives a value close to the torch path."""
+        rng = np.random.default_rng(0)
+        pred = rng.random((2, 3, 48, 48), dtype=np.float32)
+        target = np.clip(pred + 0.05 * rng.standard_normal(pred.shape), 0, 1).astype(
+            np.float32
+        )
+        np_val = compute_ssim(pred, target)
+        torch_val = compute_ssim(torch.from_numpy(pred), torch.from_numpy(target))
+        assert np_val == pytest.approx(torch_val, abs=0.02)
+
+    def test_mixed_types_raise(self) -> None:
+        """Mixing a NumPy prediction with a tensor target is rejected."""
+        with pytest.raises(TypeError):
+            compute_ssim(np.zeros((8, 8, 3), np.float32), torch.zeros(8, 8, 3))
 
 
 class TestComputeMAE:
