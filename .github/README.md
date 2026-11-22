@@ -1,7 +1,7 @@
 # 🌧️ ClearView: Neural Image Deraining
 
 <p align="center">
-  <img src="https://github.com/dronefreak/clearview/raw/main/assets/demo_showcase.jpg" alt="ClearView demo showcase: rainy input vs. derained output across four scenes"/>
+  <img src="https://github.com/dronefreak/clearview/raw/main/assets/banner.jpg" alt="ClearView banner: four rainy scenes, derained to the right of a diagonal before/after line"/>
 </p>
 
 <!-- ROW 1: Core Identity (What this project is) -->
@@ -168,6 +168,12 @@ In our own spot checks (both `net_g_real` and `net_g_best`), its visible effect 
 Columns sorted highest to lowest by average PSNR across the 9 rain-only test sets (Restormer 35.10, NAFNet Large 34.16, NAFNet Mid 33.97, UNet 31.74, ResNet50-UNet 30.63). This is a curated subset, not the full model zoo, NAFNet (Small), ResNet18/34-UNet, and Histoformer are trained/evaluated too but omitted here for brevity, see their individual model cards (above) for full numbers. Metrics computed on each source's own held-out test/eval split (not the blended validation set used for checkpoint selection), to reproduce any column, run [`configs/mix/eval_mixed.sh`](https://github.com/dronefreak/clearview/blob/main/configs/mix/eval_mixed.sh) on the published checkpoint.
 
 PSNR and SSIM are computed in RGB on the full-resolution output (clipped to [0, 1]), not on the Y channel used by many deraining papers, so they are not directly comparable to Y-channel numbers reported elsewhere.
+
+### Qualitative Examples
+
+<p align="center">
+  <img src="https://github.com/dronefreak/clearview/raw/main/assets/demo_showcase.jpg" alt="Rainy inputs (top row) and ClearView outputs (bottom row) across four scenes"/>
+</p>
 
 ---
 
