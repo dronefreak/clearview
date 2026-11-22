@@ -6,38 +6,39 @@
 # toward real-world rain without hammering the small real sets hard enough to
 # risk memorizing them.
 #
-# Paths assume the unzipped contents of mixed_datasets.zip live at
-# /home/saumya.saksena/projects/mixed_datasets -- update `data_dir` below if
-# unzipped elsewhere.
+# data_dir entries are relative to the dataset root passed as --data-dir
+# (e.g. --data-dir /path/to/mixed_datasets), laid out as:
+#   rain13k/, ddn_data/, spa_data/, realrain1k_h/, realrain1k_l/, rain100l_test/
+# See configs/mix/README.md for where each source comes from.
 
 sources:
   # Synthetic (weight 1.0 = natural frequency)
   - dataset_type: pair
-    data_dir: /home/saumya.saksena/projects/mixed_datasets/rain13k/train
+    data_dir: rain13k/train
     rainy_dir: input
     clean_dir: target
     weight: 1.0
 
   - dataset_type: rain1400
-    data_dir: /home/saumya.saksena/projects/mixed_datasets/ddn_data/training
+    data_dir: ddn_data/training
     rainy_dir: rainy_image
     clean_dir: ground_truth
     weight: 1.0
 
   # Real-world (weight 2.0 = mild oversampling)
   - dataset_type: spa-data
-    data_dir: /home/saumya.saksena/projects/mixed_datasets/spa_data
+    data_dir: spa_data
     split: train
     weight: 2.0
 
   - dataset_type: pair
-    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_h/train
+    data_dir: realrain1k_h/train
     rainy_dir: input
     clean_dir: target
     weight: 2.0
 
   - dataset_type: pair
-    data_dir: /home/saumya.saksena/projects/mixed_datasets/realrain1k_l/train
+    data_dir: realrain1k_l/train
     rainy_dir: input
     clean_dir: target
     weight: 2.0
