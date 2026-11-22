@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from clearview.training.callbacks import LearningRateScheduler
+from clearview.training.callbacks import Callback, LearningRateScheduler
 from clearview.training.ema import ExponentialMovingAverage
 from clearview.training.schedulers import WarmupCosineScheduler
 from clearview.training.trainer import Trainer
@@ -437,3 +437,159 @@ class TestTrainerAMPDtype:
 
         assert "loss" in history
         assert not torch.isnan(torch.tensor(history["loss"]))
+
+
+class _RaiseOnEpochEnd(Callback):
+    """Callback that snapshots the model's weights, then simulates Ctrl+C."""
+
+    def __init__(self, model: nn.Module) -> None:
+        super().__init__()
+        self.model = model
+        self.seen_state: dict = {}
+
+    def on_epoch_end(self, epoch, logs=None) -> None:
+        """Record the weights the model holds right now, then interrupt."""
+        self.seen_state = {k: v.clone() for k, v in self.model.state_dict().items()}
+        raise KeyboardInterrupt
+
+
+def _warmup_trainer(model: nn.Module, **trainer_kwargs) -> Trainer:
+    """Trainer with a warmup+cosine schedule and best-PSNR checkpointing."""
+    from clearview.training.callbacks import ModelCheckpoint
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    scheduler = WarmupCosineScheduler(optimizer, warmup_epochs=2, total_epochs=6)
+    callbacks = [
+        LearningRateScheduler(scheduler, verbose=0),
+        ModelCheckpoint(
+            trainer_kwargs.pop("best_path"), monitor="val_psnr", mode="max", verbose=0
+        ),
+    ]
+    return Trainer(
+        model=model,
+        optimizer=optimizer,
+        loss_fn=nn.L1Loss(),
+        device="cpu",
+        callbacks=callbacks,
+        **trainer_kwargs,
+    )
+
+
+class TestTrainerResume:
+    """Resuming must continue the run, not restart its schedule/trackers."""
+
+    def test_resume_restores_lr_schedule_and_best_metric(self, tmp_path: Path) -> None:
+        """LR scheduler position and ModelCheckpoint's best value survive a resume."""
+        trainer = _warmup_trainer(_tiny_model(), best_path=tmp_path / "best.pth")
+        trainer.fit(_tiny_loader(), val_loader=_tiny_loader(), epochs=3)
+        trainer.save_checkpoint(tmp_path / "last.pth")
+
+        old_sched = trainer.callbacks.callbacks[0].scheduler
+        old_best = trainer.callbacks.callbacks[1].best_metric
+        old_lr = trainer.optimizer.param_groups[0]["lr"]
+
+        resumed = _warmup_trainer(_tiny_model(), best_path=tmp_path / "best.pth")
+        ckpt = resumed.load_checkpoint(tmp_path / "last.pth")
+
+        assert ckpt["epoch"] == 2  # last completed epoch, resume at 3
+        new_sched = resumed.callbacks.callbacks[0].scheduler
+        assert new_sched.last_epoch == old_sched.last_epoch == 3
+        assert resumed.optimizer.param_groups[0]["lr"] == old_lr
+        assert old_lr > 0.0  # past warmup start, not reset to warmup_start_lr
+        assert resumed.callbacks.callbacks[1].best_metric == old_best
+
+    def test_early_stopping_state_survives_resume(self) -> None:
+        """EarlyStopping keeps its patience counter instead of resetting it."""
+        from clearview.training.callbacks import CallbackList, EarlyStopping
+
+        stopper = EarlyStopping(monitor="val_psnr", mode="max", patience=5)
+        stopper.best_metric, stopper.wait = 30.0, 3
+        saved = CallbackList([stopper]).state_dict()
+
+        fresh = EarlyStopping(monitor="val_psnr", mode="max", patience=5)
+        CallbackList([fresh]).load_state_dict(saved)
+        fresh.on_train_begin()
+
+        assert fresh.best_metric == 30.0
+        assert fresh.wait == 3
+
+    def test_mismatched_callback_state_is_skipped(self) -> None:
+        """Resuming with a different callback list warns instead of crashing."""
+        from clearview.training.callbacks import CallbackList, EarlyStopping
+
+        stopper = EarlyStopping(monitor="val_psnr", mode="max")
+        CallbackList([stopper]).load_state_dict(
+            [{"name": "ModelCheckpoint", "state": {"best_metric": 1.0}}]
+        )
+        assert stopper.best_metric == float("-inf")
+
+    def test_save_every_writes_resumable_checkpoint(self, tmp_path: Path) -> None:
+        """fit(save_every=N) writes a full checkpoint every N epochs."""
+        trainer = _warmup_trainer(_tiny_model(), best_path=tmp_path / "best.pth")
+        last = tmp_path / "last.pth"
+        trainer.fit(
+            _tiny_loader(),
+            val_loader=_tiny_loader(),
+            epochs=2,
+            save_every=2,
+            last_checkpoint_path=last,
+        )
+        ckpt = torch.load(last)
+        assert ckpt["epoch"] == 1
+        assert "callbacks_state" in ckpt
+
+
+class TestTrainerInterrupt:
+    """Ctrl+C handling: propagate to the caller, never leave EMA weights in."""
+
+    def test_keyboard_interrupt_propagates_and_restores_raw_weights(self) -> None:
+        """An interrupt during callbacks re-raises with raw weights swapped back."""
+        import pytest
+
+        model = _tiny_model()
+        interrupter = _RaiseOnEpochEnd(model)
+        trainer = Trainer(
+            model=model,
+            optimizer=torch.optim.Adam(model.parameters(), lr=1e-2),
+            loss_fn=nn.L1Loss(),
+            device="cpu",
+            callbacks=[interrupter],
+            use_ema=True,
+            ema_decay=0.999,
+        )
+
+        with pytest.raises(KeyboardInterrupt):
+            trainer.fit(_tiny_loader(), val_loader=_tiny_loader(), epochs=3)
+
+        # During on_epoch_end the model held the EMA shadow weights. After
+        # the interrupt it must hold the raw weights again, which differ.
+        after = model.state_dict()
+        assert any(
+            not torch.allclose(after[k], interrupter.seen_state[k]) for k in after
+        )
+        assert trainer.last_completed_epoch == -1  # epoch 0 never completed
+
+    def test_early_stopping_restores_best_weights_with_ema(self) -> None:
+        """restore_best_weights is not undone by the trainer's EMA swap-back."""
+        from clearview.training.callbacks import EarlyStopping
+
+        model = _tiny_model()
+        stopper = EarlyStopping(
+            monitor="val_loss", mode="min", patience=1, restore_best_weights=True
+        )
+        # min_delta so large nothing after epoch 0 counts as improvement
+        stopper.min_delta = 1e9
+        trainer = Trainer(
+            model=model,
+            optimizer=torch.optim.Adam(model.parameters(), lr=1e-2),
+            loss_fn=nn.L1Loss(),
+            device="cpu",
+            callbacks=[stopper],
+            use_ema=True,
+        )
+        trainer.fit(_tiny_loader(), val_loader=_tiny_loader(), epochs=5)
+
+        assert stopper.stop_training
+        assert stopper.best_weights is not None
+        for k, v in model.state_dict().items():
+            assert torch.allclose(v, stopper.best_weights[k])

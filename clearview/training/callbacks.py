@@ -51,6 +51,17 @@ class Callback(ABC):
     def on_batch_end(self, batch: int, logs: Optional[Dict[str, Any]] = None) -> None:
         pass
 
+    # Resume support: callbacks with internal state (best metric so far,
+    # patience counter, LR schedule position) override these so that
+    # ``Trainer.save_checkpoint``/``load_checkpoint`` can carry that state
+    # across a ``--resume``. Stateless callbacks keep the empty defaults.
+    def state_dict(self) -> Dict[str, Any]:
+        """Return this callback's resumable state (empty by default)."""
+        return {}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """Restore state produced by :meth:`state_dict` (no-op by default)."""
+
 
 class CallbackList:
     """Container for managing multiple callbacks.
@@ -98,6 +109,37 @@ class CallbackList:
         """Call on_batch_end for all callbacks."""
         for callback in self.callbacks:
             callback.on_batch_end(batch, logs)
+
+    def state_dict(self) -> List[Dict[str, Any]]:
+        """Collect every callback's resumable state, in list order."""
+        return [
+            {"name": type(callback).__name__, "state": callback.state_dict()}
+            for callback in self.callbacks
+        ]
+
+    def load_state_dict(self, states: List[Dict[str, Any]]) -> None:
+        """Restore callback states saved by :meth:`state_dict`.
+
+        States are matched to callbacks by position and class name. A
+        mismatch (e.g. resuming with a different set of callbacks) is
+        skipped with a warning rather than raising, so the model/optimizer
+        state can still be resumed.
+        """
+        for i, callback in enumerate(self.callbacks):
+            if i >= len(states):
+                logger.warning(
+                    f"No saved state for callback #{i} "
+                    f"({type(callback).__name__}); starting it fresh"
+                )
+                continue
+            entry = states[i]
+            if entry.get("name") != type(callback).__name__:
+                logger.warning(
+                    f"Saved state #{i} is for {entry.get('name')}, not "
+                    f"{type(callback).__name__}; starting it fresh"
+                )
+                continue
+            callback.load_state_dict(entry.get("state", {}))
 
 
 class ModelCheckpoint(Callback):
@@ -157,6 +199,15 @@ class ModelCheckpoint(Callback):
     def set_optimizer(self, optimizer: Optimizer) -> None:
         """Set the optimizer to checkpoint."""
         self.optimizer = optimizer
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Return the best metric seen so far, so a resume doesn't reset it."""
+        return {"best_metric": self.best_metric}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """Restore the best metric seen so far."""
+        if "best_metric" in state:
+            self.best_metric = float(state["best_metric"])
 
     def _is_improvement(self, current: float) -> bool:
         """Check if current metric is an improvement."""
@@ -269,10 +320,28 @@ class EarlyStopping(Callback):
         self.best_weights: Optional[Dict[str, torch.Tensor]] = None
         self.model = None
         self.stop_training = False
+        # Set by load_state_dict() so the next on_train_begin() keeps the
+        # restored state instead of resetting it.
+        self._resumed = False
 
     def set_model(self, model: nn.Module) -> None:
         """Set the model."""
         self.model = model
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Return best metric, patience counter and (if kept) best weights."""
+        return {
+            "best_metric": self.best_metric,
+            "wait": self.wait,
+            "best_weights": self.best_weights,
+        }
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """Restore state saved by :meth:`state_dict`."""
+        self.best_metric = float(state.get("best_metric", self.best_metric))
+        self.wait = int(state.get("wait", 0))
+        self.best_weights = state.get("best_weights")
+        self._resumed = True
 
     def _is_improvement(self, current: float) -> bool:
         """Check if current metric is an improvement."""
@@ -282,7 +351,12 @@ class EarlyStopping(Callback):
             return current > (self.best_metric + self.min_delta)
 
     def on_train_begin(self, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Reset state at training start."""
+        """Reset state at training start, unless it was just restored."""
+        self.stopped_epoch = 0
+        self.stop_training = False
+        if self._resumed:
+            self._resumed = False
+            return
         self.wait = 0
         self.stopped_epoch = 0
         self.best_metric = float("inf") if self.mode == "min" else float("-inf")
@@ -330,15 +404,21 @@ class EarlyStopping(Callback):
                 self.stopped_epoch = epoch
                 self.stop_training = True
 
-                if self.restore_best_weights and self.best_weights is not None:
-                    if self.verbose > 0:
-                        logger.info("Restoring model weights from best epoch")
-                    if self.model is not None:
-                        self.model.load_state_dict(self.best_weights)
-
     def on_train_end(self, logs: Optional[Dict[str, Any]] = None) -> None:
-        """Print early stopping message."""
-        if self.stopped_epoch > 0 and self.verbose > 0:
+        """Restore the best weights (if requested) and log the stop.
+
+        Restoring happens here rather than in ``on_epoch_end`` because the
+        Trainer may still have EMA shadow weights swapped into the model
+        during ``on_epoch_end``. Swapping the raw weights back afterwards
+        would silently overwrite weights restored at that point.
+        """
+        if self.stop_training and self.restore_best_weights:
+            if self.best_weights is not None and self.model is not None:
+                if self.verbose > 0:
+                    logger.info("Restoring model weights from best epoch")
+                self.model.load_state_dict(self.best_weights)
+
+        if self.stop_training and self.verbose > 0:
             logger.info(
                 f"Early stopping triggered after epoch {self.stopped_epoch}. "
                 f"Best {self.monitor}: {self.best_metric:.4f}"
@@ -374,6 +454,19 @@ class LearningRateScheduler(Callback):
         self.scheduler = scheduler
         self.monitor = monitor
         self.verbose = verbose
+
+    def state_dict(self) -> Dict[str, Any]:
+        """Return the wrapped scheduler's state (its position in the schedule)."""
+        return {"scheduler": self.scheduler.state_dict()}
+
+    def load_state_dict(self, state: Dict[str, Any]) -> None:
+        """Restore the wrapped scheduler's state.
+
+        Without this, a resumed run restarts the schedule from step 0
+        (e.g. re-doing the linear warmup from the warmup start LR).
+        """
+        if "scheduler" in state:
+            self.scheduler.load_state_dict(state["scheduler"])
 
     def on_epoch_end(self, epoch: int, logs: Optional[Dict[str, Any]] = None) -> None:
         """Step the scheduler at epoch end."""

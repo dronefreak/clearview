@@ -198,6 +198,11 @@ class Trainer:
 
         # Training state
         self.epoch: int = 0
+        # Index of the last epoch that ran to completion (train + val +
+        # callbacks). Checkpoints record this, not ``self.epoch``, so that
+        # resuming after an interruption mid-epoch re-runs that epoch
+        # instead of skipping it, keeping the LR schedule in step.
+        self.last_completed_epoch: int = -1
         self.history: Dict[str, List] = {
             "train_loss": [],
             "val_loss": [],
@@ -395,6 +400,8 @@ class Trainer:
         val_loader: Optional[DataLoader] = None,
         epochs: int = 100,
         start_epoch: int = 0,
+        save_every: int = 0,
+        last_checkpoint_path: Optional[Union[str, Path]] = None,
     ) -> Dict[str, List[float]]:
         """Train the model.
 
@@ -403,9 +410,18 @@ class Trainer:
             val_loader: Validation data loader (optional)
             epochs: Number of epochs to train
             start_epoch: Starting epoch (for resuming training)
+            save_every: If > 0 (and ``last_checkpoint_path`` is given), save
+                a full resumable checkpoint every N completed epochs,
+                overwriting the same file
+            last_checkpoint_path: Where to write the periodic checkpoint
 
         Returns:
             Training history dictionary
+
+        Raises:
+            KeyboardInterrupt: Re-raised after ``on_train_end`` callbacks run,
+                so the caller can save a resumable checkpoint. The model
+                holds the raw (non-EMA) training weights at that point.
         """
         logger.info(f"Starting training for {epochs} epochs")
         logger.info(f"Device: {self.device}")
@@ -413,6 +429,7 @@ class Trainer:
             f"Model parameters: {sum(p.numel() for p in self.model.parameters()):,}"
         )
 
+        self.last_completed_epoch = max(self.last_completed_epoch, start_epoch - 1)
         self.callbacks.on_train_begin()
 
         try:
@@ -430,52 +447,66 @@ class Trainer:
                 # validate_epoch) — otherwise a callback like ModelCheckpoint
                 # saves the raw (non-EMA) weights even though the val_psnr it
                 # is keying off of was computed on the EMA weights.
+                # The try/finally also covers validate_epoch, so an
+                # interruption during validation can't leave the EMA weights
+                # in the model in place of the raw training weights.
                 val_metrics = None
                 ema_backup = None
-                if val_loader is not None:
-                    if self.ema is not None and self.validate_with_ema:
-                        ema_backup = self.ema.apply_shadow(self.raw_model)
-                    val_metrics = self.validate_epoch(val_loader)
-
-                # Update history
-                self.history["train_loss"].append(train_metrics["loss"])
-                for metric in self.metrics:
-                    self.history[f"train_{metric}"].append(train_metrics[metric])
-
-                if val_metrics is not None:
-                    self.history["val_loss"].append(val_metrics["loss"])
-                    for metric in self.metrics:
-                        self.history[f"val_{metric}"].append(val_metrics[metric])
-
-                # Prepare logs for callbacks
-                logs = {
-                    "train_loss": train_metrics["loss"],
-                }
-                for metric in self.metrics:
-                    logs[f"train_{metric}"] = train_metrics[metric]
-
-                if val_metrics is not None:
-                    logs["val_loss"] = val_metrics["loss"]
-                    for metric in self.metrics:
-                        logs[f"val_{metric}"] = val_metrics[metric]
-
-                # Callback
                 try:
+                    if val_loader is not None:
+                        if self.ema is not None and self.validate_with_ema:
+                            ema_backup = self.ema.apply_shadow(self.raw_model)
+                        val_metrics = self.validate_epoch(val_loader)
+
+                    # Update history
+                    self.history["train_loss"].append(train_metrics["loss"])
+                    for metric in self.metrics:
+                        self.history[f"train_{metric}"].append(train_metrics[metric])
+
+                    if val_metrics is not None:
+                        self.history["val_loss"].append(val_metrics["loss"])
+                        for metric in self.metrics:
+                            self.history[f"val_{metric}"].append(val_metrics[metric])
+
+                    # Prepare logs for callbacks
+                    logs = {
+                        "train_loss": train_metrics["loss"],
+                    }
+                    for metric in self.metrics:
+                        logs[f"train_{metric}"] = train_metrics[metric]
+
+                    if val_metrics is not None:
+                        logs["val_loss"] = val_metrics["loss"]
+                        for metric in self.metrics:
+                            logs[f"val_{metric}"] = val_metrics[metric]
+
+                    # Callback
                     self.callbacks.on_epoch_end(epoch, logs)
                 finally:
                     if ema_backup is not None and self.ema is not None:
                         self.ema.restore(self.raw_model, ema_backup)
+
+                self.last_completed_epoch = epoch
+
+                # Log epoch summary
+                self._log_epoch_summary(epoch, train_metrics, val_metrics)
+
+                # Periodic resumable checkpoint
+                if (
+                    save_every > 0
+                    and last_checkpoint_path is not None
+                    and (epoch + 1) % save_every == 0
+                ):
+                    self.save_checkpoint(last_checkpoint_path)
 
                 # Check for early stopping
                 if self._check_early_stop():
                     logger.info("Early stopping triggered")
                     break
 
-                # Log epoch summary
-                self._log_epoch_summary(epoch, train_metrics, val_metrics)
-
         except KeyboardInterrupt:
             logger.info("Training interrupted by user")
+            raise
 
         finally:
             if self.scaler is not None:
@@ -516,10 +547,15 @@ class Trainer:
             **kwargs: Additional items to save
         """
         checkpoint = {
-            "epoch": self.epoch,
+            # Last fully completed epoch; resume starts at epoch + 1.
+            "epoch": self.last_completed_epoch,
             "model_state_dict": self.raw_model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "history": self.history,
+            "scaler_state_dict": self.scaler.state_dict(),
+            # LR scheduler position, best-metric trackers, early-stopping
+            # patience, etc. (see Callback.state_dict)
+            "callbacks_state": self.callbacks.state_dict(),
         }
         if self.ema is not None:
             checkpoint["ema_state_dict"] = self.ema.state_dict()
@@ -548,7 +584,7 @@ class Trainer:
         if not filepath.exists():
             raise FileNotFoundError(f"Checkpoint not found: {filepath}")
 
-        checkpoint = torch.load(filepath, map_location=self.device)
+        checkpoint = torch.load(filepath, map_location=self.device, weights_only=True)
 
         self.raw_model.load_state_dict(checkpoint["model_state_dict"])
 
@@ -558,8 +594,21 @@ class Trainer:
         if self.ema is not None and "ema_state_dict" in checkpoint:
             self.ema.load_state_dict(checkpoint["ema_state_dict"])
 
+        if load_optimizer and checkpoint.get("scaler_state_dict"):
+            self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
+
+        if "callbacks_state" in checkpoint:
+            self.callbacks.load_state_dict(checkpoint["callbacks_state"])
+        else:
+            logger.warning(
+                f"{filepath} has no callback state (saved by an older "
+                "ClearView version): the LR schedule, best-checkpoint "
+                "tracking and early-stopping patience restart from scratch"
+            )
+
         if "epoch" in checkpoint:
             self.epoch = checkpoint["epoch"]
+            self.last_completed_epoch = checkpoint["epoch"]
 
         if "history" in checkpoint:
             self.history = checkpoint["history"]
