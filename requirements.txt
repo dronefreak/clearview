@@ -1,39 +1,18 @@
-albumentations>=1.3.0
-hydra-core>=1.3.0
-
-# Visualization
+# Full research environment: the core package dependencies (also declared in
+# pyproject.toml), the optional evaluation metrics, and the Hugging Face Hub
+# client used to download published checkpoints. Equivalent to:
+#   pip install -e ".[metrics,hub]"
+einops>=0.6.0
+huggingface_hub>=0.20.0
+lpips>=0.1.4
 matplotlib>=3.7.0
 numpy>=1.24.0
-
-# Configuration
-omegaconf>=2.3.0
-
-# ONNX export (optional)
-onnx>=1.14.0
-onnxruntime>=1.15.0
 opencv-python>=4.8.0
-
-# Data handling
-pandas>=2.0.0
 Pillow>=10.0.0
+piq>=0.7.0
 PyYAML>=6.0
-
-# Logging
-rich>=13.0.0
 scikit-image>=0.21.0
-
-# Metrics and evaluation
-scikit-learn>=1.3.0
-scipy>=1.11.0
-seaborn>=0.12.0
-segmentation-models-pytorch>=0.3.0
-tensorboard>=2.13.0
-
-# Model architectures (optional backbones)
-timm>=0.9.0
-# Core dependencies
+scipy>=1.10.0
 torch>=2.0.0
 torchvision>=0.15.0
-
-# Training utilities
 tqdm>=4.65.0

@@ -1,145 +1,77 @@
-.PHONY: help install install-dev test lint format clean setup-venv pre-commit
+.PHONY: help setup-venv install install-dev test test-cov lint format format-check \
+	type-check pre-commit-install pre-commit-run clean build
 
-# Default target
+PYTHON ?= python3
+SRC := clearview tests
+
 help:
-	@echo "VisDrone Toolkit - Available Commands:"
+	@echo "ClearView - available commands:"
 	@echo ""
-	@echo "Setup & Installation:"
-	@echo "  make setup-venv     - Create virtual environment"
-	@echo "  make install        - Install package in virtualenv"
-	@echo "  make install-dev    - Install package with dev dependencies"
+	@echo "Setup:"
+	@echo "  make setup-venv          Create a virtual environment in ./.venv"
+	@echo "  make install             Install the package (editable)"
+	@echo "  make install-dev         Install with dev, metrics and hub extras"
 	@echo ""
 	@echo "Development:"
-	@echo "  make test           - Run tests with pytest"
-	@echo "  make lint           - Run linters (flake8, mypy)"
-	@echo "  make format         - Format code (black, isort)"
-	@echo "  make format-check   - Check code formatting without changes"
+	@echo "  make test                Run the test suite"
+	@echo "  make test-cov            Run the test suite with coverage"
+	@echo "  make lint                Lint with ruff"
+	@echo "  make format              Format with ruff (and fix lint issues)"
+	@echo "  make format-check        Check formatting without changing files"
+	@echo "  make type-check          Type-check with mypy"
 	@echo ""
-	@echo "Pre-commit Hooks:"
-	@echo "  make pre-commit-install  - Install pre-commit hooks"
-	@echo "  make pre-commit-run      - Run pre-commit on all files"
-	@echo "  make pre-commit-update   - Update pre-commit hook versions"
+	@echo "Pre-commit:"
+	@echo "  make pre-commit-install  Install the git hooks"
+	@echo "  make pre-commit-run      Run all hooks on all files"
 	@echo ""
-	@echo "Cleaning:"
-	@echo "  make clean          - Remove build artifacts and cache"
-	@echo "  make clean-all      - Remove everything including venv"
-	@echo ""
-	@echo "Quick Start:"
-	@echo "  make setup-venv     - Create virtual environment"
-	@echo "  source venv/bin/activate"
-	@echo "  make install-dev    - Install with dev dependencies"
-	@echo "  make pre-commit-install  - Setup pre-commit hooks"
+	@echo "Other:"
+	@echo "  make build               Build sdist and wheel into ./dist"
+	@echo "  make clean               Remove build artifacts and caches"
 
-# Create virtual environment
 setup-venv:
-	@echo "Creating virtual environment..."
-	python3 -m venv venv
-	@echo "✓ Virtual environment created in ./venv"
-	@echo ""
-	@echo "Activate it with:"
-	@echo "  source venv/bin/activate  # Linux/Mac"
-	@echo "  venv\\Scripts\\activate     # Windows"
+	$(PYTHON) -m venv .venv
+	@echo "Created .venv. Activate it with: source .venv/bin/activate"
 
-# Install package
 install:
 	pip install --upgrade pip
 	pip install -e .
-	@echo "✓ Package installed successfully"
 
-# Install with development dependencies
 install-dev:
 	pip install --upgrade pip
-	pip install -e ".[dev]"
-	@echo "✓ Package installed with dev dependencies"
-	@echo ""
-	@echo "Setup pre-commit hooks with:"
-	@echo "  pre-commit install"
+	pip install -e ".[dev,metrics,hub]"
 
-# Run tests
 test:
-	pytest tests/ -v --cov=visdrone_toolkit --cov-report=term-missing
+	pytest tests/
 
-# Run linters
+test-cov:
+	pytest tests/ --cov=clearview --cov-report=term-missing
+
 lint:
-	@echo "Running flake8..."
-	flake8 visdrone_toolkit scripts tests
-	@echo "Running mypy..."
-	mypy visdrone_toolkit scripts
+	ruff check $(SRC)
 
-# Format code
 format:
-	@echo "Formatting with black..."
-	black visdrone_toolkit scripts tests
-	@echo "Sorting imports with isort..."
-	isort visdrone_toolkit scripts tests
-	@echo "✓ Code formatted"
+	ruff check --fix $(SRC)
+	ruff format $(SRC)
 
-# Check formatting without making changes
 format-check:
-	black --check visdrone_toolkit scripts tests
-	isort --check-only visdrone_toolkit scripts tests
+	ruff format --check $(SRC)
 
-# Clean build artifacts
-clean:
-	@echo "Cleaning build artifacts..."
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.egg-info
-	rm -rf .eggs/
-	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete
-	find . -type f -name "*.pyo" -delete
-	find . -type f -name "*~" -delete
-	rm -rf .pytest_cache/
-	rm -rf .mypy_cache/
-	rm -rf .coverage
-	rm -rf htmlcov/
-	@echo "✓ Cleaned"
+type-check:
+	mypy clearview --config-file pyproject.toml
 
-# Clean everything including virtualenv
-clean-all: clean
-	@echo "Removing virtual environment..."
-	rm -rf venv/
-	@echo "✓ Everything cleaned"
-
-# Build distribution packages
-build:
-	python -m pip install --upgrade build
-	python -m build
-	@echo "✓ Distribution packages built in dist/"
-
-# Upload to PyPI (test)
-upload-test: build
-	python -m pip install --upgrade twine
-	python -m twine upload --repository testpypi dist/*
-
-# Upload to PyPI (production)
-upload: build
-	python -m pip install --upgrade twine
-	python -m twine upload dist/*
-
-# Pre-commit hooks
 pre-commit-install:
-	@echo "Installing pre-commit hooks..."
 	pip install pre-commit
 	pre-commit install
 	pre-commit install --hook-type commit-msg
-	@echo "✓ Pre-commit hooks installed"
-	@echo ""
-	@echo "Hooks will now run automatically on git commit"
-	@echo "Run 'make pre-commit-run' to check all files now"
 
 pre-commit-run:
-	@echo "Running pre-commit on all files..."
 	pre-commit run --all-files
 
-pre-commit-update:
-	@echo "Updating pre-commit hooks to latest versions..."
-	pre-commit autoupdate
-	@echo "✓ Pre-commit hooks updated"
+build:
+	$(PYTHON) -m pip install --upgrade build
+	$(PYTHON) -m build
 
-pre-commit-uninstall:
-	@echo "Uninstalling pre-commit hooks..."
-	pre-commit uninstall
-	pre-commit uninstall --hook-type commit-msg
-	@echo "✓ Pre-commit hooks uninstalled"
+clean:
+	rm -rf build/ dist/ *.egg-info .eggs/ htmlcov/ .coverage
+	rm -rf .pytest_cache/ .mypy_cache/ .ruff_cache/
+	find . -path ./.venv -prune -o -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
