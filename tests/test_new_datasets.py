@@ -653,8 +653,8 @@ class TestRainDSDataset:
         dataset = RainDSDataset(root_dir=root_dir, degradation="rainstreak")
         assert len(dataset) == 3
 
-    def test_unmatched_files_excluded_not_fatal(self, temp_dir: Path) -> None:
-        """Test that an unmatched filename (e.g. IMG_7435.png) is excluded, not an error."""
+    def test_upstream_alias_pairs_img_7435_with_scene_218(self, temp_dir: Path) -> None:
+        """Test that the misnamed upstream IMG_7435.png pairs with gt/218.png."""
         root_dir = temp_dir / "RainDS_real" / "test_set"
         gt_dir = root_dir / "gt"
         rain_dir = root_dir / "rainstreak"
@@ -663,6 +663,41 @@ class TestRainDSDataset:
 
         _save_random_image(gt_dir / "218.png")
         _save_random_image(rain_dir / "IMG_7435.png")
+        _save_random_image(gt_dir / "101.png")
+        _save_random_image(rain_dir / "101.png")
+
+        dataset = RainDSDataset(root_dir=root_dir, degradation="rainstreak")
+        assert len(dataset) == 2
+        pairs = {
+            c.name: r.name for r, c in zip(dataset.rainy_files, dataset.clean_files)
+        }
+        assert pairs["218.png"] == "IMG_7435.png"
+
+    def test_alias_never_overrides_a_real_file(self, temp_dir: Path) -> None:
+        """Test that IMG_7435.png is ignored when a real 218.png exists."""
+        root_dir = temp_dir / "RainDS_real" / "test_set"
+        gt_dir = root_dir / "gt"
+        rain_dir = root_dir / "rainstreak"
+        gt_dir.mkdir(parents=True)
+        rain_dir.mkdir(parents=True)
+
+        _save_random_image(gt_dir / "218.png")
+        _save_random_image(rain_dir / "218.png")
+        _save_random_image(rain_dir / "IMG_7435.png")
+
+        dataset = RainDSDataset(root_dir=root_dir, degradation="rainstreak")
+        assert [p.name for p in dataset.rainy_files] == ["218.png"]
+
+    def test_unmatched_files_excluded_not_fatal(self, temp_dir: Path) -> None:
+        """Test that an unmatched filename is excluded, not an error."""
+        root_dir = temp_dir / "RainDS_real" / "test_set"
+        gt_dir = root_dir / "gt"
+        rain_dir = root_dir / "rainstreak"
+        gt_dir.mkdir(parents=True)
+        rain_dir.mkdir(parents=True)
+
+        _save_random_image(gt_dir / "300.png")
+        _save_random_image(rain_dir / "IMG_9999.png")
         _save_random_image(gt_dir / "101.png")
         _save_random_image(rain_dir / "101.png")
 

@@ -1525,13 +1525,16 @@ class RainDSDataset(Dataset):
         >>> degraded, clean = dataset[0]
 
     Note:
-        RainDS_real's official ``test_set/rainstreak`` folder ships one file
-        (``IMG_7435.png``) with no corresponding numeric ID in ``gt/``, a
-        known inconsistency in the upstream release, not something specific
-        to this mirror. This class matches on the intersection of available
-        IDs rather than raising on mismatch, and logs a warning naming how
-        many images were excluded.
+        RainDS_real's official ``test_set/rainstreak`` folder ships scene
+        218 as ``IMG_7435.png`` instead of ``218.png``, an inconsistency in
+        the upstream release. ``KNOWN_ALIASES`` maps it back to its scene ID
+        (verified visually and by pixel difference against ``gt/218.png``),
+        but only when no real ``218.png`` exists. Any other unmatched file
+        is excluded with a warning rather than raising.
     """
+
+    # Upstream files saved under a camera filename instead of their scene ID.
+    KNOWN_ALIASES: Dict[str, str] = {"IMG_7435": "218"}
 
     GT_MARKER = "norain-"
     DEGRADATION_MARKERS: Dict[str, str] = {
@@ -1598,16 +1601,19 @@ class RainDSDataset(Dataset):
                     return pie_prefix + stem[len(full) :]
             return stem
 
-        gt_by_id = {
-            _strip(f.stem, self.GT_MARKER): f
-            for f in gt_entries
-            if f.suffix.lower() in extensions
-        }
-        deg_by_id = {
-            _strip(f.stem, self.DEGRADATION_MARKERS[degradation]): f
-            for f in deg_entries
-            if f.suffix.lower() in extensions
-        }
+        def _index(entries: List[Path], marker: str) -> Dict[str, Path]:
+            by_id = {
+                _strip(f.stem, marker): f
+                for f in entries
+                if f.suffix.lower() in extensions
+            }
+            for alias, scene_id in self.KNOWN_ALIASES.items():
+                if alias in by_id and scene_id not in by_id:
+                    by_id[scene_id] = by_id.pop(alias)
+            return by_id
+
+        gt_by_id = _index(gt_entries, self.GT_MARKER)
+        deg_by_id = _index(deg_entries, self.DEGRADATION_MARKERS[degradation])
 
         common_ids_set = set(gt_by_id) & set(deg_by_id)
         if not common_ids_set:
