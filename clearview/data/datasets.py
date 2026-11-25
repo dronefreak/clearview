@@ -1483,6 +1483,162 @@ class NTIREHazeDataset(Dataset):
         return rainy_tensor, clean_tensor
 
 
+class REVIDEDataset(Dataset):
+    """Dataset for REVIDE, a real-world paired video dehazing dataset.
+
+    REVIDE (Zhang et al., CVPR 2021) films each indoor scene twice with the
+    same camera path, once with real haze from a haze machine and once
+    without, giving frame-aligned hazy/clean video pairs. The released
+    indoor set stores one subdirectory per video, with identical frame
+    filenames on both sides::
+
+        REVIDE/Train/
+        ├── gt/
+        │   ├── C002_1/
+        │   │   ├── 00000.JPG
+        │   │   └── ...
+        │   └── ...
+        └── hazy/
+            ├── C002_1/   # same video names and frame names as gt/
+            └── ...
+
+    Point ``root_dir`` at one split directory (``Train`` or ``Test``).
+    Frames are paired on (video, frame filename); a frame present on only
+    one side is skipped with a warning. Frames are returned as independent
+    pairs in (video, frame) order, and ``frame_videos`` records which video
+    each pair came from, for callers that need per-video grouping.
+
+    Args:
+        root_dir: Split directory containing ``gt`` and ``hazy``
+        transform: Optional transform to apply to both images
+        videos: Optional subset of video names to load (default: all)
+        extensions: Valid image extensions (matched case-insensitively)
+
+    Example:
+        >>> dataset = REVIDEDataset('data/REVIDE/Train')
+        >>> hazy, clean = dataset[0]
+    """
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        transform: Optional[Callable] = None,
+        videos: Optional[Sequence[str]] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize REVIDE dataset.
+
+        Args:
+            root_dir: Split directory containing gt/ and hazy/
+            transform: Optional transform
+            videos: Optional subset of video names to load
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If root_dir, gt/ or hazy/ is missing
+            ValueError: If a requested video is missing or no pairs match
+        """
+        root_dir = Path(root_dir)
+        gt_dir = root_dir / "gt"
+        hazy_dir = root_dir / "hazy"
+        for d in (gt_dir, hazy_dir):
+            if not d.is_dir():
+                raise FileNotFoundError(
+                    f"Expected directory not found: {d} (point root_dir at a "
+                    "REVIDE split such as 'Train' or 'Test')"
+                )
+
+        self.transform = transform
+        self.extensions = extensions
+        exts = {e.lower() for e in extensions}
+
+        gt_videos = {p.name for p in gt_dir.iterdir() if p.is_dir()}
+        hazy_videos = {p.name for p in hazy_dir.iterdir() if p.is_dir()}
+        available = gt_videos & hazy_videos
+        if videos is not None:
+            missing = sorted(set(videos) - available)
+            if missing:
+                raise ValueError(f"Videos not found in {root_dir}: {missing}")
+            selected = sorted(set(videos))
+        else:
+            selected = sorted(available)
+            unpaired = sorted(gt_videos ^ hazy_videos)
+            if unpaired:
+                logger.warning(
+                    f"Skipping {len(unpaired)} REVIDE video(s) present on only "
+                    f"one side: {unpaired}"
+                )
+
+        self.rainy_files: List[Path] = []
+        self.clean_files: List[Path] = []
+        self.frame_videos: List[str] = []
+        for video in selected:
+            gt_frames = {
+                f.name: f
+                for f in (gt_dir / video).iterdir()
+                if f.suffix.lower() in exts
+            }
+            hazy_frames = {
+                f.name: f
+                for f in (hazy_dir / video).iterdir()
+                if f.suffix.lower() in exts
+            }
+            unmatched = set(gt_frames) ^ set(hazy_frames)
+            if unmatched:
+                logger.warning(
+                    f"REVIDE video {video}: skipping {len(unmatched)} frame(s) "
+                    "present on only one side"
+                )
+            for name in sorted(set(gt_frames) & set(hazy_frames)):
+                self.rainy_files.append(hazy_frames[name])
+                self.clean_files.append(gt_frames[name])
+                self.frame_videos.append(video)
+
+        if not self.rainy_files:
+            raise ValueError(
+                f"No hazy/gt frame pairs found under {root_dir}. Expected "
+                "gt/<video>/<frame> and hazy/<video>/<frame> with matching names."
+            )
+
+        logger.info(
+            f"Loaded {len(self.rainy_files)} REVIDE frame pairs from "
+            f"{len(set(self.frame_videos))} videos"
+        )
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a hazy/clean frame pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (hazy_tensor, clean_tensor)
+        """
+        hazy_np = (
+            np.array(Image.open(self.rainy_files[idx]).convert("RGB")).astype(
+                np.float32
+            )
+            / 255.0
+        )
+        clean_np = (
+            np.array(Image.open(self.clean_files[idx]).convert("RGB")).astype(
+                np.float32
+            )
+            / 255.0
+        )
+
+        if self.transform is not None:
+            transformed = self.transform(image=hazy_np, target=clean_np)
+            hazy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        return numpy_to_tensor(hazy_np), numpy_to_tensor(clean_np)
+
+
 class RainDSDataset(Dataset):
     """Dataset for RainDS, a combined rain-streak + raindrop removal benchmark.
 

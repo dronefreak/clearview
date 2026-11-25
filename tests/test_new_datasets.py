@@ -16,6 +16,7 @@ from clearview.data.datasets import (
     Rain13KDataset,
     RainDropDataset,
     RainDSDataset,
+    REVIDEDataset,
     SPADataDataset,
 )
 
@@ -601,6 +602,67 @@ class TestNTIREHazeDataset:
 
         with pytest.raises(ValueError):
             NTIREHazeDataset(root_dir=root_dir)
+
+
+def _make_revide_split(root: Path, videos: dict) -> Path:
+    """Create a REVIDE-style split: {gt,hazy}/<video>/<frame>.JPG."""
+    for video, frames in videos.items():
+        for side in ("gt", "hazy"):
+            (root / side / video).mkdir(parents=True, exist_ok=True)
+            for name in frames:
+                _save_random_image(root / side / video / name, size=32)
+    return root
+
+
+class TestREVIDEDataset:
+    """Tests for REVIDEDataset."""
+
+    def test_pairs_across_videos(self, temp_dir: Path) -> None:
+        """Frames pair by (video, filename) in sorted order, uppercase .JPG included."""
+        root = _make_revide_split(
+            temp_dir / "Train",
+            {"W001_1": ["00000.JPG", "00001.JPG"], "C002": ["00000.JPG"]},
+        )
+        dataset = REVIDEDataset(root)
+
+        assert len(dataset) == 3
+        assert dataset.frame_videos == ["C002", "W001_1", "W001_1"]
+        for hazy, clean in zip(dataset.rainy_files, dataset.clean_files):
+            assert hazy.parent.parent.name == "hazy"
+            assert clean.parent.parent.name == "gt"
+            assert (hazy.parent.name, hazy.name) == (clean.parent.name, clean.name)
+
+    def test_unmatched_frames_skipped(self, temp_dir: Path) -> None:
+        """A frame present on only one side is skipped, not fatal."""
+        root = _make_revide_split(temp_dir / "Train", {"E001": ["00000.JPG"]})
+        _save_random_image(root / "gt" / "E001" / "00001.JPG", size=32)
+
+        assert len(REVIDEDataset(root)) == 1
+
+    def test_video_subset(self, temp_dir: Path) -> None:
+        """The videos argument restricts loading to the named videos."""
+        root = _make_revide_split(
+            temp_dir / "Test", {"C005": ["00000.JPG"], "L006": ["00000.JPG"]}
+        )
+
+        dataset = REVIDEDataset(root, videos=["L006"])
+        assert dataset.frame_videos == ["L006"]
+        with pytest.raises(ValueError):
+            REVIDEDataset(root, videos=["NOPE"])
+
+    def test_getitem_shapes(self, temp_dir: Path) -> None:
+        """__getitem__ returns a (hazy, clean) pair of 3-channel tensors."""
+        root = _make_revide_split(temp_dir / "Test", {"J004": ["00000.JPG"]})
+        hazy, clean = REVIDEDataset(root)[0]
+
+        assert hazy.shape == clean.shape == (3, 32, 32)
+
+    def test_missing_side_raises(self, temp_dir: Path) -> None:
+        """A split without both gt/ and hazy/ raises FileNotFoundError."""
+        (temp_dir / "Train" / "gt").mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError):
+            REVIDEDataset(temp_dir / "Train")
 
 
 class TestRainDSDataset:

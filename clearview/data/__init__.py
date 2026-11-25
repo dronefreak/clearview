@@ -16,6 +16,7 @@ from clearview.data.datasets import (
     Rain1400Dataset,
     RainDropDataset,
     RainDSDataset,
+    REVIDEDataset,
     SingleFolderDataset,
     SPADataDataset,
     SyntheticRainDataset,
@@ -47,6 +48,7 @@ __all__ = [
     "RainDropDataset",
     "RainDSDataset",
     "NTIREHazeDataset",
+    "REVIDEDataset",
     "SyntheticRainDataset",
     "MixedDataset",
     # Transforms
