@@ -5,6 +5,7 @@ various formats (image pairs, directories, etc.).
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Union, cast
 
@@ -1637,6 +1638,141 @@ class REVIDEDataset(Dataset):
             clean_np = transformed["target"]
 
         return numpy_to_tensor(hazy_np), numpy_to_tensor(clean_np)
+
+
+class OutdoorRainDataset(Dataset):
+    """Dataset for Outdoor-Rain, synthetic heavy rain with fog (rain + veil).
+
+    Outdoor-Rain (Li, Cheong and Tan, CVPR 2019) renders rain streaks and a
+    depth-based fog veil onto clean outdoor photos. Each clean image has 15
+    rainy renders (5 streak angles x 3 render variants), named after the
+    clean image with the angle and variant appended::
+
+        Outdoor-Rain/train/
+        ├── in/       # im_0001_s80_a04.png, ..., im_0600_s100_a06.png
+        ├── gt/       # im_0001.png, ..., im_0600.png
+        ├── streak/   # rain-streak layer per render (not loaded here)
+        ├── trans/    # transmission map per render (not loaded here)
+        └── atm/      # atmospheric light per render (not loaded here)
+
+    Point ``root_dir`` at the split directory containing ``in`` and ``gt``.
+    Each rainy render ``im_XXXX_sAA_aBB`` is paired with ``gt/im_XXXX``;
+    files that don't follow this pattern, or whose clean image is missing,
+    are skipped with a warning.
+
+    Args:
+        root_dir: Split directory containing ``in`` and ``gt``
+        transform: Optional transform to apply to both images
+        extensions: Valid image extensions (matched case-insensitively)
+
+    Example:
+        >>> dataset = OutdoorRainDataset('data/Outdoor-Rain/train')
+        >>> rainy, clean = dataset[0]
+        >>> dataset.streak_angles[0], dataset.variants[0]
+    """
+
+    _NAME_RE = re.compile(r"^(?P<scene>.+)_s(?P<angle>\d+)_a(?P<variant>\d+)$")
+
+    def __init__(
+        self,
+        root_dir: Union[str, Path],
+        transform: Optional[Callable] = None,
+        extensions: Tuple[str, ...] = (".png", ".jpg", ".jpeg"),
+    ) -> None:
+        """Initialize Outdoor-Rain dataset.
+
+        Args:
+            root_dir: Split directory containing in/ and gt/
+            transform: Optional transform
+            extensions: Valid image extensions
+
+        Raises:
+            FileNotFoundError: If root_dir, in/ or gt/ is missing
+            ValueError: If no rainy/clean pairs match
+        """
+        root_dir = Path(root_dir)
+        in_dir = root_dir / "in"
+        gt_dir = root_dir / "gt"
+        for d in (in_dir, gt_dir):
+            if not d.is_dir():
+                raise FileNotFoundError(
+                    f"Expected directory not found: {d} (point root_dir at an "
+                    "Outdoor-Rain split such as 'train')"
+                )
+
+        self.transform = transform
+        self.extensions = extensions
+        exts = {e.lower() for e in extensions}
+
+        gt_by_stem = {f.stem: f for f in gt_dir.iterdir() if f.suffix.lower() in exts}
+
+        self.rainy_files: List[Path] = []
+        self.clean_files: List[Path] = []
+        self.scene_ids: List[str] = []
+        self.streak_angles: List[int] = []
+        self.variants: List[int] = []
+        skipped = 0
+        for f in sorted(in_dir.iterdir()):
+            if f.suffix.lower() not in exts:
+                continue
+            m = self._NAME_RE.match(f.stem)
+            if m is None or m["scene"] not in gt_by_stem:
+                skipped += 1
+                continue
+            self.rainy_files.append(f)
+            self.clean_files.append(gt_by_stem[m["scene"]])
+            self.scene_ids.append(m["scene"])
+            self.streak_angles.append(int(m["angle"]))
+            self.variants.append(int(m["variant"]))
+
+        if skipped:
+            logger.warning(
+                f"Skipping {skipped} Outdoor-Rain file(s) in {in_dir} that don't "
+                "match <scene>_s<angle>_a<variant> or have no clean image"
+            )
+        if not self.rainy_files:
+            raise ValueError(
+                f"No rainy/clean pairs found under {root_dir}. Expected "
+                "in/<scene>_s<angle>_a<variant>.png and gt/<scene>.png."
+            )
+
+        logger.info(
+            f"Loaded {len(self.rainy_files)} Outdoor-Rain pairs from "
+            f"{len(set(self.scene_ids))} clean images"
+        )
+
+    def __len__(self) -> int:
+        """Get dataset length."""
+        return len(self.rainy_files)
+
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Get a rainy/clean image pair.
+
+        Args:
+            idx: Index
+
+        Returns:
+            Tuple of (rainy_tensor, clean_tensor)
+        """
+        rainy_np = (
+            np.array(Image.open(self.rainy_files[idx]).convert("RGB")).astype(
+                np.float32
+            )
+            / 255.0
+        )
+        clean_np = (
+            np.array(Image.open(self.clean_files[idx]).convert("RGB")).astype(
+                np.float32
+            )
+            / 255.0
+        )
+
+        if self.transform is not None:
+            transformed = self.transform(image=rainy_np, target=clean_np)
+            rainy_np = transformed["image"]
+            clean_np = transformed["target"]
+
+        return numpy_to_tensor(rainy_np), numpy_to_tensor(clean_np)
 
 
 class RainDSDataset(Dataset):

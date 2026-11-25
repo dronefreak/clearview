@@ -11,6 +11,7 @@ from clearview.data.datasets import (
     ImagePairDataset,
     MixedDataset,
     NTIREHazeDataset,
+    OutdoorRainDataset,
     Rain13KDataset,
     Rain100Dataset,
     Rain1400Dataset,
@@ -49,6 +50,7 @@ __all__ = [
     "RainDSDataset",
     "NTIREHazeDataset",
     "REVIDEDataset",
+    "OutdoorRainDataset",
     "SyntheticRainDataset",
     "MixedDataset",
     # Transforms

@@ -13,6 +13,7 @@ from clearview.data.datasets import (
     ImagePairDataset,
     MixedDataset,
     NTIREHazeDataset,
+    OutdoorRainDataset,
     Rain13KDataset,
     RainDropDataset,
     RainDSDataset,
@@ -663,6 +664,70 @@ class TestREVIDEDataset:
 
         with pytest.raises(FileNotFoundError):
             REVIDEDataset(temp_dir / "Train")
+
+
+def _make_outdoor_rain_split(root: Path, scenes: dict) -> Path:
+    """Create an Outdoor-Rain-style split: gt/<scene>.png, in/<scene>_s<a>_a<v>.png."""
+    (root / "gt").mkdir(parents=True, exist_ok=True)
+    (root / "in").mkdir(parents=True, exist_ok=True)
+    for scene, renders in scenes.items():
+        _save_random_image(root / "gt" / f"{scene}.png", size=32)
+        for angle, variant in renders:
+            _save_random_image(
+                root / "in" / f"{scene}_s{angle}_a{variant:02d}.png", size=32
+            )
+    return root
+
+
+class TestOutdoorRainDataset:
+    """Tests for OutdoorRainDataset."""
+
+    def test_pairs_renders_with_clean_image(self, temp_dir: Path) -> None:
+        """Every render pairs with its scene's clean image; angle/variant parsed."""
+        root = _make_outdoor_rain_split(
+            temp_dir / "train",
+            {"im_0001": [(80, 4), (100, 6)], "im_0002": [(95, 5)]},
+        )
+        dataset = OutdoorRainDataset(root)
+
+        assert len(dataset) == 3
+        assert dataset.scene_ids == ["im_0001", "im_0001", "im_0002"]
+        assert dataset.streak_angles == [100, 80, 95]
+        assert dataset.variants == [6, 4, 5]
+        for rainy, clean, scene in zip(
+            dataset.rainy_files, dataset.clean_files, dataset.scene_ids
+        ):
+            assert rainy.name.startswith(scene + "_s")
+            assert clean.name == f"{scene}.png"
+
+    def test_unmatched_files_skipped(self, temp_dir: Path) -> None:
+        """Renders without a clean image, or with an unexpected name, are skipped."""
+        root = _make_outdoor_rain_split(temp_dir / "train", {"im_0001": [(90, 4)]})
+        _save_random_image(root / "in" / "im_0009_s90_a04.png", size=32)
+        _save_random_image(root / "in" / "im_0001.png", size=32)
+
+        assert len(OutdoorRainDataset(root)) == 1
+
+    def test_getitem_shapes(self, temp_dir: Path) -> None:
+        """__getitem__ returns a (rainy, clean) pair of 3-channel tensors."""
+        root = _make_outdoor_rain_split(temp_dir / "train", {"im_0001": [(85, 5)]})
+        rainy, clean = OutdoorRainDataset(root)[0]
+
+        assert rainy.shape == clean.shape == (3, 32, 32)
+
+    def test_missing_dir_raises(self, temp_dir: Path) -> None:
+        """A split without both in/ and gt/ raises FileNotFoundError."""
+        (temp_dir / "train" / "gt").mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError):
+            OutdoorRainDataset(temp_dir / "train")
+
+    def test_no_pairs_raises(self, temp_dir: Path) -> None:
+        """No matching pairs raises ValueError."""
+        root = _make_outdoor_rain_split(temp_dir / "train", {"im_0001": []})
+
+        with pytest.raises(ValueError):
+            OutdoorRainDataset(root)
 
 
 class TestRainDSDataset:
